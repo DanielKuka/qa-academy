@@ -10,5 +10,8 @@ playwright-report/
 .DS_Store
 Thumbs.db
 
-# Локальні нотатки сесій агента
-docs/SESSION_NOTES.md
+# Локальні нотатки конкретного комп'ютера
+docs/LOCAL_NOTES.md
+
+# package-lock, що з'являється в навчальних проєктах кат
+exercises/**/my-project/package-lock.json
