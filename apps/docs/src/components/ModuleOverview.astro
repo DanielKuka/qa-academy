@@ -1,0 +1,107 @@
+---
+import { findModule, lessonKey, levels } from '../data/curriculum';
+import { ui } from '../data/ui';
+import { lessonUrl, localeOf, writtenLessons } from '../lib/site';
+import ProgressBar from './ProgressBar.astro';
+
+interface Props {
+	id: string;
+}
+
+const mod = findModule(Astro.props.id);
+if (!mod) throw new Error(`Unknown module: ${Astro.props.id}`);
+
+const locale = localeOf(Astro.url);
+const t = ui[locale];
+const written = await writtenLessons();
+const keys = mod.lessons.map((ls) => lessonKey(mod.id, ls.id));
+---
+
+<div class="module not-content">
+	<p class="meta">
+		<span class="level" data-level={mod.level}>{levels[mod.level][locale]}</span>
+		<span><strong>{t.outcome}:</strong> {mod.outcome[locale]}</span>
+	</p>
+
+	<ProgressBar moduleId={mod.id} keys={keys} />
+
+	<h2 id="module-lessons">{t.lessons}</h2>
+	<ol class="lessons" aria-labelledby="module-lessons">
+		{
+			mod.lessons.map((ls, i) => {
+				const key = keys[i];
+				const ready = written.has(key);
+				return (
+					<li>
+						{ready ? (
+							<a href={lessonUrl(locale, mod.id, ls.id)}>{ls.title[locale]}</a>
+						) : (
+							<span class="soon-title">{ls.title[locale]}</span>
+						)}
+						{ready ? (
+							<span class="badge" data-lesson-badge={key} data-module={mod.id} data-status="todo">
+								{t.status.todo}
+							</span>
+						) : (
+							<span class="badge" data-status="soon">
+								🚧 {t.soon}
+							</span>
+						)}
+					</li>
+				);
+			})
+		}
+	</ol>
+
+	<section class="skip" data-module-skip={mod.id} data-known="false">
+		<h2>{t.skipTitle}</h2>
+		<p>{t.skipIntro}</p>
+		<ul>
+			{
+				mod.checkpoints.map((c) => (
+					<li>
+						<label>
+							<input type="checkbox" /> {c[locale]}
+						</label>
+					</li>
+				))
+			}
+		</ul>
+		<div class="when-unknown">
+			<button type="button" data-skip-confirm disabled>{t.skipConfirm}</button>
+		</div>
+		<div class="when-known">
+			<p class="done">✓ {t.skipDone}</p>
+			<button type="button" data-skip-undo class="secondary">{t.skipUndo}</button>
+		</div>
+	</section>
+</div>
+
+<script>
+	import '../scripts/progress-ui';
+</script>
+
+<style>
+	.module { margin-top: 1rem; }
+	.meta { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: baseline; }
+	.level {
+		font-size: var(--sl-text-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		padding: 0.15rem 0.5rem;
+		border-radius: 999px;
+		border: 1px solid var(--sl-color-accent);
+		color: var(--sl-color-accent-high);
+	}
+	h2 { margin-top: 2rem; font-size: var(--sl-text-h3); }
+	.lessons { padding-inline-start: 1.5rem; }
+	.lessons li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0; border-bottom: 1px solid var(--sl-color-hairline); }
+	.soon-title { color: var(--sl-color-gray-3); }
+	.skip { margin-top: 2rem; padding: 1rem 1.25rem; border: 1px solid var(--sl-color-hairline-shade); border-radius: 0.5rem; background: var(--sl-color-bg-nav); }
+	.skip ul { list-style: none; padding: 0; }
+	.skip li { padding: 0.3rem 0; }
+	.skip label { display: flex; gap: 0.6rem; align-items: flex-start; cursor: pointer; }
+	.skip input { margin-top: 0.3rem; flex-shrink: 0; }
+	.skip[data-known='true'] .when-unknown, .skip[data-known='false'] .when-known { display: none; }
+	.done { color: var(--sl-color-green-high); font-weight: 600; }
+</style>

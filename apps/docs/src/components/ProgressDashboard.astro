@@ -1,0 +1,119 @@
+---
+import { lessonKey, modules } from '../data/curriculum';
+import { ui } from '../data/ui';
+import { lessonUrl, localeOf, writtenLessons } from '../lib/site';
+
+const locale = localeOf(Astro.url);
+const t = ui[locale];
+const written = await writtenLessons();
+
+// Усі уроки курсу в порядку проходження; для «продовжити з» беремо лише написані.
+const all = modules.flatMap((m) =>
+	m.lessons.map((ls) => ({
+		module: m.id,
+		key: lessonKey(m.id, ls.id),
+		title: `${m.title[locale]} → ${ls.title[locale]}`,
+		url: lessonUrl(locale, m.id, ls.id),
+		ready: written.has(lessonKey(m.id, ls.id)),
+	})),
+);
+---
+
+<div class="dash not-content" data-dashboard data-lessons={JSON.stringify(all)}>
+	<p class="warn" data-storage-off hidden>{t.storageOff}</p>
+
+	<div class="overall">
+		<span>{t.overall}</span>
+		<strong data-overall>0%</strong>
+	</div>
+
+	<p class="next" data-next hidden>
+		{t.continueWith}: <a data-next-link href="#"></a>
+	</p>
+	<p class="next" data-all-done hidden>{t.allDone}</p>
+
+	<div class="actions">
+		<button type="button" data-export>{t.exportBtn}</button>
+		<label class="qa-button secondary-label">
+			{t.importBtn}
+			<input type="file" accept="application/json,.json" data-import hidden />
+		</label>
+		<button type="button" class="secondary" data-reset data-confirm={t.resetConfirm}>{t.resetBtn}</button>
+	</div>
+	<p class="msg" data-msg data-ok={t.importOk} data-fail={t.importFail} aria-live="polite"></p>
+</div>
+
+<script>
+	import * as progress from '../scripts/progress';
+	import '../scripts/progress-ui';
+
+	type Item = { module: string; key: string; title: string; url: string; ready: boolean };
+
+	const root = document.querySelector<HTMLElement>('[data-dashboard]');
+	if (root) {
+		const items: Item[] = JSON.parse(root.dataset.lessons ?? '[]');
+		const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+
+		const render = () => {
+			const data = progress.load();
+			const finished = (i: Item) => {
+				const s = progress.lessonStatus(data, i.module, i.key);
+				return s === 'done' || s === 'known';
+			};
+			const pct = items.length ? Math.round((items.filter(finished).length / items.length) * 100) : 0;
+			$('[data-overall]').textContent = `${pct}%`;
+
+			const next = items.find((i) => i.ready && !finished(i));
+			$('[data-next]').hidden = !next;
+			$('[data-all-done]').hidden = !!next;
+			if (next) {
+				const a = $<HTMLAnchorElement>('[data-next-link]');
+				a.href = next.url;
+				a.textContent = next.title;
+			}
+		};
+
+		try {
+			localStorage.getItem('probe');
+		} catch {
+			$('[data-storage-off]').hidden = false;
+		}
+
+		$('[data-export]').addEventListener('click', () => {
+			const blob = new Blob([progress.exportJson()], { type: 'application/json' });
+			const a = document.createElement('a');
+			a.href = URL.createObjectURL(blob);
+			a.download = `qa-academy-progress-${new Date().toISOString().slice(0, 10)}.json`;
+			a.click();
+			URL.revokeObjectURL(a.href);
+		});
+
+		$<HTMLInputElement>('[data-import]').addEventListener('change', async (e) => {
+			const input = e.target as HTMLInputElement;
+			const file = input.files?.[0];
+			if (!file) return;
+			const msg = $('[data-msg]');
+			msg.textContent = progress.importJson(await file.text()) ? msg.dataset.ok! : msg.dataset.fail!;
+			input.value = '';
+		});
+
+		$('[data-reset]').addEventListener('click', (e) => {
+			const btn = e.currentTarget as HTMLElement;
+			if (confirm(btn.dataset.confirm)) progress.reset();
+		});
+
+		progress.onChange(render);
+		render();
+	}
+</script>
+
+<style>
+	.dash { margin-top: 1rem; }
+	.overall { display: flex; align-items: baseline; gap: 1rem; font-size: var(--sl-text-xl); }
+	.overall strong { font-size: var(--sl-text-4xl); color: var(--sl-color-accent-high); }
+	.next { margin-top: 0.75rem; }
+	.actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; }
+	.secondary-label { background: transparent; color: var(--sl-color-text); display: inline-flex; align-items: center; }
+	.msg { margin-top: 0.5rem; font-size: var(--sl-text-sm); }
+	.warn { padding: 0.5rem 0.75rem; border-inline-start: 3px solid var(--sl-color-orange); background: var(--sl-color-orange-low); }
+</style>

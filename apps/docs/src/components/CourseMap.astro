@@ -1,0 +1,62 @@
+---
+import { lessonKey, levels, modules, type Level } from '../data/curriculum';
+import { ui } from '../data/ui';
+import { localeOf, moduleUrl, writtenLessons } from '../lib/site';
+import ProgressBar from './ProgressBar.astro';
+
+const locale = localeOf(Astro.url);
+const t = ui[locale];
+const written = await writtenLessons();
+const order: Level[] = ['foundation', 'junior', 'middle', 'sdet'];
+---
+
+<div class="map not-content">
+	{
+		order.map((level) => (
+			<section>
+				<h2>{levels[level][locale]}</h2>
+				<div class="grid">
+					{modules
+						.filter((m) => m.level === level)
+						.map((m) => {
+							const keys = m.lessons.map((ls) => lessonKey(m.id, ls.id));
+							const ready = keys.filter((k) => written.has(k)).length;
+							return (
+								<a class="card" href={moduleUrl(locale, m.id)}>
+									<span class="num">{m.id.slice(0, 2)}</span>
+									<strong>{m.title[locale]}</strong>
+									<span class="outcome">{m.outcome[locale]}</span>
+									<ProgressBar moduleId={m.id} keys={keys} />
+									{ready < keys.length && (
+										<span class="written">
+											✍️ {ready}/{keys.length} — {t.soon}
+										</span>
+									)}
+								</a>
+							);
+						})}
+				</div>
+			</section>
+		))
+	}
+</div>
+
+<script>
+	import '../scripts/progress-ui';
+</script>
+
+<style>
+	h2 { margin-top: 2rem; font-size: var(--sl-text-h3); }
+	.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem; margin-top: 0.75rem; }
+	.card {
+		display: flex; flex-direction: column; gap: 0.5rem;
+		padding: 1rem; border-radius: 0.5rem;
+		border: 1px solid var(--sl-color-hairline-shade);
+		background: var(--sl-color-bg-nav);
+		color: var(--sl-color-text); text-decoration: none;
+	}
+	.card:hover { border-color: var(--sl-color-accent); }
+	.num { font-family: var(--sl-font-mono); font-size: var(--sl-text-xs); color: var(--sl-color-accent-high); }
+	.outcome { font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); flex: 1; }
+	.written { font-size: var(--sl-text-xs); color: var(--sl-color-gray-3); }
+</style>

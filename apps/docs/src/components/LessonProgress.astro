@@ -1,0 +1,39 @@
+---
+import { lessonKey } from '../data/curriculum';
+import { ui } from '../data/ui';
+import { localeOf } from '../lib/site';
+
+interface Props {
+	module: string;
+	lesson: string;
+}
+
+const { module: moduleId, lesson } = Astro.props;
+const key = lessonKey(moduleId, lesson);
+const t = ui[localeOf(Astro.url)];
+---
+
+<aside class="lesson-progress not-content" aria-label={t.lessonQuestion} data-lesson-controls={key} data-module={moduleId}>
+	<p class="q">
+		{t.lessonQuestion}
+		<span class="badge" role="status" data-lesson-badge={key} data-module={moduleId} data-status="todo">{t.status.todo}</span>
+	</p>
+	<div class="buttons">
+		<button type="button" data-set="in-progress" aria-pressed="false">{t.markInProgress}</button>
+		<button type="button" data-set="done" aria-pressed="false">{t.markDone}</button>
+		<button type="button" data-set="known" aria-pressed="false">{t.markKnown}</button>
+		<button type="button" data-set="todo" aria-pressed="false" class="secondary">{t.markReset}</button>
+	</div>
+	<p class="hint">{t.knownHint}</p>
+</aside>
+
+<script>
+	import '../scripts/progress-ui';
+</script>
+
+<style>
+	.lesson-progress { margin-top: 2.5rem; padding: 1rem 1.25rem; border: 1px solid var(--sl-color-hairline-shade); border-radius: 0.5rem; background: var(--sl-color-bg-nav); }
+	.q { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; font-weight: 600; }
+	.buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+	.hint { margin-top: 0.75rem; font-size: var(--sl-text-sm); color: var(--sl-color-gray-3); }
+</style>

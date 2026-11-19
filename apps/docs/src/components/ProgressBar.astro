@@ -1,0 +1,27 @@
+---
+interface Props {
+	moduleId: string;
+	keys: string[];
+}
+const { moduleId, keys } = Astro.props;
+---
+
+<div
+	class="bar not-content"
+	role="progressbar"
+	aria-valuemin="0"
+	aria-valuemax="100"
+	aria-valuenow="0"
+	data-module-bar={moduleId}
+	data-lessons={keys.join(',')}
+>
+	<div class="track"><div class="fill" data-fill></div></div>
+	<span class="label" data-label></span>
+</div>
+
+<style>
+	.bar { display: flex; align-items: center; gap: 0.75rem; }
+	.track { flex: 1; height: 0.5rem; border-radius: 999px; background: var(--sl-color-gray-6); overflow: hidden; }
+	.fill { height: 100%; width: 0; background: var(--sl-color-accent); transition: width 0.3s; }
+	.label { font-size: var(--sl-text-xs); color: var(--sl-color-gray-3); white-space: nowrap; min-width: 7rem; text-align: end; }
+</style>

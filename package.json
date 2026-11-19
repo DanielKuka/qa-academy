@@ -1,0 +1,27 @@
+{
+  "name": "qa-academy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Цілісний шлях від QA до SDET: JavaScript, TypeScript, Playwright, API, CI/CD і співбесіда.",
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @qa-academy/docs",
+    "build": "npm run build -w @qa-academy/docs",
+    "preview": "npm run preview -w @qa-academy/docs",
+    "sync:modules": "npm run sync:modules -w @qa-academy/docs",
+    "check": "vitest run",
+    "check:watch": "vitest",
+    "verify:solutions": "vitest run --mode solutions",
+    "test:site": "npm run build && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "vitest": "^5.1.1"
+  }
+}

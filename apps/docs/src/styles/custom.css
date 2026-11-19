@@ -1,0 +1,36 @@
+/* Спільні елементи платформи. Кольори беремо з токенів Starlight — тож світла і темна теми працюють автоматично. */
+
+.badge {
+	display: inline-block;
+	font-size: var(--sl-text-xs);
+	line-height: 1.4;
+	padding: 0.1rem 0.55rem;
+	border-radius: 999px;
+	border: 1px solid var(--sl-color-gray-5);
+	color: var(--sl-color-gray-2);
+	white-space: nowrap;
+}
+.badge[data-status='in-progress'] { border-color: var(--sl-color-blue); color: var(--sl-color-blue-high); }
+.badge[data-status='done'] { border-color: var(--sl-color-green); color: var(--sl-color-green-high); }
+.badge[data-status='known'] { border-color: var(--sl-color-purple); color: var(--sl-color-purple-high); }
+.badge[data-status='soon'] { border-style: dashed; color: var(--sl-color-gray-3); }
+
+.not-content button,
+.qa-button {
+	font: inherit;
+	font-size: var(--sl-text-sm);
+	padding: 0.4rem 0.9rem;
+	border-radius: 0.4rem;
+	border: 1px solid var(--sl-color-accent);
+	background: var(--sl-color-accent);
+	color: var(--sl-color-black);
+	cursor: pointer;
+}
+.not-content button.secondary,
+.not-content button[aria-pressed='false'] {
+	background: transparent;
+	color: var(--sl-color-text);
+}
+.not-content button[aria-pressed='true'] { background: var(--sl-color-accent); color: var(--sl-color-black); }
+.not-content button:disabled { opacity: 0.45; cursor: not-allowed; }
+.not-content button:focus-visible { outline: 2px solid var(--sl-color-accent-high); outline-offset: 2px; }

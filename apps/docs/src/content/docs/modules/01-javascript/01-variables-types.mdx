@@ -1,0 +1,224 @@
+---
+title: Змінні, значення і типи
+description: let і const, примітивні типи, typeof, null проти undefined, truthy/falsy і чому завжди ===.
+sidebar:
+  order: 1
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Уяви: API повертає товар, і ти перевіряєш ціну.
+
+```js
+const product = { name: 'Молоток', price: '100' }; // ціна прийшла рядком!
+
+if (product.price == 100) {
+  console.log('Ціна правильна'); // спрацює — і тест пропустить баг
+}
+```
+
+Бекенд мав повернути число `100`, а повернув рядок `'100'`. Фронтенд, який додає ціни, покаже
+`'100' + 50 = '10050'`. Тест із `==` цього не помітив. Тест із `===` — помітив би.
+
+Ще приклад — валідація форми, де поле «кількість» вважається порожнім:
+
+```js
+if (!quantity) showError('Вкажіть кількість'); // а якщо користувач ввів 0?
+```
+
+Типи — це не теорія для програмістів. Це **половина багів**, які ти будеш ловити.
+
+## Концепція
+
+### Змінні: `const` і `let`
+
+Змінна — це ім'я, прив'язане до значення.
+
+```js
+const baseUrl = 'https://example.test'; // не можна перепризначити
+let attempts = 0;                        // можна змінювати
+attempts = attempts + 1;
+```
+
+Правило: **завжди `const`**, а `let` — лише коли значення справді змінюється. Слово `var` —
+застаріле, у новому коді його не використовують.
+
+### Типи значень
+
+У JavaScript сім **примітивних** типів і один складений:
+
+| Тип | Приклади |
+|---|---|
+| `string` | `'текст'`, `"текст"`, `` `шаблон ${x}` `` |
+| `number` | `42`, `3.14`, `-1`, `NaN`, `Infinity` |
+| `boolean` | `true`, `false` |
+| `undefined` | значення ще не присвоєне |
+| `null` | «значення навмисно порожнє» |
+| `bigint` | `9007199254740993n` (рідко потрібен) |
+| `symbol` | унікальні ключі (рідко потрібен) |
+| `object` | `{ a: 1 }`, `[1, 2]`, функції, дати… |
+
+### `typeof`: дізнатися тип
+
+```js
+typeof 'hi'        // 'string'
+typeof 42          // 'number'
+typeof true        // 'boolean'
+typeof undefined   // 'undefined'
+typeof {}          // 'object'
+typeof []          // 'object'   ← масив теж об'єкт!
+typeof null        // 'object'   ← історична помилка мови, її не виправлять
+typeof (() => {})  // 'function'
+
+Array.isArray([])  // true — правильний спосіб перевірити масив
+value === null     // true — правильний спосіб перевірити null
+```
+
+### `null` проти `undefined`
+
+- `undefined` — «тут нічого не поклали». Так виглядає відсутнє поле об'єкта або змінна без значення.
+- `null` — «тут навмисно порожньо». Бекенд пише `"middleName": null`, коли по батькові немає.
+
+Для тестувальника це **різні** відповіді API: поле є і порожнє проти поля немає взагалі.
+Контракт API зазвичай чітко каже, яке з них очікується.
+
+### Truthy і falsy
+
+В умовах (`if`, `!`, `&&`, `||`) будь-яке значення перетворюється на `true` або `false`.
+**Falsy** — лише ці вісім значень, усе інше — truthy:
+
+```js
+false, 0, -0, 0n, '', null, undefined, NaN
+```
+
+Тож `'0'`, `' '`, `[]` і `{}` — **truthy**. А число `0` — falsy, звідси баг із полем «кількість».
+
+### `==` проти `===`
+
+`==` перед порівнянням намагається привести типи, `===` — ні:
+
+```js
+'100' == 100   // true   ← приховує баг
+'100' === 100  // false  ← показує баг
+0 == ''        // true   ← абсурд
+null == undefined  // true
+null === undefined // false
+```
+
+**Правило курсу: завжди `===` і `!==`.** Винятків немає.
+
+### Неявне перетворення типів
+
+```js
+'5' + 1    // '51'  — плюс із рядком склеює
+'5' - 1    // 4     — мінус перетворює на число
+Number(' 12 ')  // 12
+Number('12px')  // NaN
+```
+
+<Aside type="tip" title="Що з цього для автотестів">
+Текст з інтерфейсу (`textContent`, `innerText`, значення інпуту) — **завжди рядок**. Лічильник товарів у
+кошику `"3"` треба перетворити на число, перш ніж порівнювати з `3`.
+</Aside>
+
+## Типові помилки
+
+1. **`if (!value)` як перевірка «порожнє»** — відсікає `0` і `false`, які є нормальними значеннями.
+   Перевіряй явно: `value === null || value === undefined`.
+2. **`typeof value === 'object'` для перевірки об'єкта** — пропускає `null` і масиви.
+3. **«`const` означає незмінне»** — ні. `const` забороняє перепризначення, а не зміну вмісту:
+   ```js
+   const user = { name: 'Ann' };
+   user.name = 'Bob'; // працює!
+   user = {};         // TypeError
+   ```
+4. **Порівняння числа з текстом з UI** — `'3' === 3` дає `false`, і тест падає «незрозуміло чому».
+5. **`value === NaN`** — завжди `false`, бо `NaN` не дорівнює навіть собі. Використовуй `Number.isNaN(value)`.
+
+## Документація
+
+Прочитай саме в такому порядку:
+
+1. [javascript.info: Змінні](https://uk.javascript.info/variables) — українською.
+2. [javascript.info: Типи даних](https://uk.javascript.info/types)
+3. [javascript.info: Перетворення типів](https://uk.javascript.info/type-conversions)
+4. [javascript.info: Порівняння](https://uk.javascript.info/comparison)
+5. Довідник для перевірки деталей: [MDN: typeof](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/typeof),
+   [MDN: Falsy](https://developer.mozilla.org/en-US/docs/Glossary/Falsy),
+   [MDN: Equality comparisons](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Equality_comparisons_and_sameness)
+
+## Практика
+
+Ката: `exercises/01-javascript/01-variables-types`. Три функції, які знадобляться тобі в реальних
+тестах: константа, визначення типу значення з API і перевірка «чи порожнє поле форми».
+
+```sh
+npm run check -- exercises/01-javascript/01-variables-types
+```
+
+Тобі знадобиться умова `if`, яку ми детально розберемо в уроці 03. Поки достатньо цього шаблону:
+
+```js
+function example(value) {
+  if (value === null) {
+    return 'це null';
+  }
+  return 'щось інше';
+}
+```
+
+## Самоперевірка
+
+Відповідай уголос, потім розгорни відповідь.
+
+<details>
+<summary>Коли використовувати `let`, а коли `const`?</summary>
+
+`const` — завжди за замовчуванням. `let` — лише якщо змінну справді треба перепризначити (лічильник,
+накопичувач). `var` — ніколи.
+</details>
+
+<details>
+<summary>Що поверне `typeof null` і як правильно перевірити null?</summary>
+
+`'object'` — це відома помилка мови. Перевіряти треба так: `value === null`.
+</details>
+
+<details>
+<summary>Назви всі falsy-значення.</summary>
+
+`false`, `0`, `-0`, `0n`, `''`, `null`, `undefined`, `NaN`.
+</details>
+
+<details>
+<summary>Чому `'100' == 100` — небезпечно в тестах?</summary>
+
+`==` приводить типи, тому тест не помітить, що API повернув рядок замість числа. `===` порівнює і тип,
+і значення.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Яка різниця між `let`, `const` і `var`?
+- Яка різниця між `null` і `undefined`?
+- Що таке truthy та falsy? Наведіть приклади.
+- Яка різниця між `==` і `===`? Що ви використовуєте і чому?
+- Чому `typeof null` повертає `'object'`?
+- Чи можна змінити об'єкт, оголошений через `const`?
+</TabItem>
+<TabItem label="English">
+- What is the difference between `let`, `const` and `var`?
+- What is the difference between `null` and `undefined`?
+- What are truthy and falsy values? Give examples.
+- What is the difference between `==` and `===`? Which do you use, and why?
+- Why does `typeof null` return `'object'`?
+- Can you modify an object declared with `const`?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="01-javascript" lesson="01-variables-types" />

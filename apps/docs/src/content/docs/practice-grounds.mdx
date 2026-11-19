@@ -1,0 +1,49 @@
+---
+title: Полігони для практики
+description: Публічні сайти та API, на яких можна тренувати автоматизацію, і правила поводження з ними.
+sidebar:
+  order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Основний полігон курсу — власний навчальний застосунок у теці `apps/sandbox` (з'явиться перед
+модулем 06). Він стабільний і вміє вмикати навмисні баги для перевірки твоїх тестів.
+
+Публічні полігони нижче — для додаткової практики і різноманіття.
+
+## UI
+
+| Полігон | Чим корисний |
+|---|---|
+| [demo.playwright.dev/todomvc](https://demo.playwright.dev/todomvc/) | Офіційне демо Playwright. Ідеальний перший тест |
+| [saucedemo.com](https://www.saucedemo.com/) | Магазин з «проблемними» користувачами: баги, повільність, помилки |
+| [the-internet.herokuapp.com](https://the-internet.herokuapp.com/) | Колекція незручних елементів: iframe, alert, drag&drop, upload, динамічний контент |
+
+## UI + API
+
+| Полігон | Чим корисний |
+|---|---|
+| [practicesoftwaretesting.com](https://practicesoftwaretesting.com/) | Магазин інструментів з UI та документованим API; є версії з навмисними багами |
+| [automationexercise.com](https://automationexercise.com/) | Магазин з UI-сценаріями та переліком API-ендпоінтів для тренування |
+
+## API
+
+| Полігон | Чим корисний |
+|---|---|
+| [restful-booker.herokuapp.com](https://restful-booker.herokuapp.com/) | CRUD з авторизацією через токен; містить навмисні баги |
+| [petstore.swagger.io](https://petstore.swagger.io/) | Класичне OpenAPI-демо: читання документації та контракту |
+| [jsonplaceholder.typicode.com](https://jsonplaceholder.typicode.com/) | Фейкові дані для перших запитів; запис не зберігається |
+
+## Локальні інструменти
+
+| Інструмент | Для чого |
+|---|---|
+| [Mailpit](https://mailpit.axllent.org/) | Локальний поштовий сервер у Docker — для тестування email-флоу |
+
+<Aside type="caution" title="Правила поводження з чужими полігонами">
+- Це чужі сервери, і вони безкоштовні. **Ніколи не запускай на них навантажувальні тести.**
+- Не запускай сотні паралельних прогонів — отримаєш rate limit або бан.
+- Публічні полігони падають і змінюються. Якщо тест раптом почав падати — спершу перевір сайт руками.
+- Дані на них бачать інші люди: не вводь справжніх email, паролів чи персональних даних.
+</Aside>
