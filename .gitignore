@@ -9,3 +9,6 @@ playwright-report/
 !.env.example
 .DS_Store
 Thumbs.db
+
+# Локальні нотатки сесій агента
+docs/SESSION_NOTES.md
