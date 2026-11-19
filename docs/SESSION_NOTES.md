@@ -9,11 +9,33 @@
 ## Поточний стан
 
 - Сайт: https://danielkuka.github.io/qa-academy/ — CI зелений, Pages працює (Source: GitHub Actions).
-- В роботі: **модуль 00 «Середовище розробника»** (обсяг узгоджено 2026-11-19, див. нижче).
-  - ✅ Усі 4 ката написані й перевірені (`verify:solutions` 55/55, підказки на порожніх катах перевірені).
-  - ✅ Усі 6 уроків написані (UA). `test:site` 9/9.
-  - ⏭ **Наступний крок:** рев'ю модуля 00 власником, правки за його коментарями.
-- Далі: модуль 01, уроки 02–14 (спершу узгодити обсяг).
+- Модуль 00 «Середовище розробника» — написаний, **чекає рев'ю власника**.
+- Модуль 01 «JavaScript: основи» — **написаний повністю** (14 уроків, 14 ката), чекає рев'ю власника.
+  Обсяг визначено автором-агентом без попереднього узгодження (власник дав свободу дій) — див. нижче.
+- ⏭ **Наступний крок:** рев'ю модулів 00 і 01, правки; далі модуль 02 «Асинхронний JavaScript»
+  (спершу узгодити обсяг).
+
+### Модуль 01 — обсяг (на рев'ю)
+
+Одна ката на урок, домен — тестові дані, відповіді API, звіти прогонів, інтернет-магазин.
+
+| Урок | Ката: функції |
+|---|---|
+| 02-operators | `toCents`, `calcTotal` (копійки, округлення), `getDisplayName` (`?.` + `\|\|`), `getDiscountPercent` (`??`) |
+| 03-conditions | `getStatusCategory` (граничні значення HTTP-кодів), `getPasswordError`, `getBadgeColor` (lookup-об'єкт) |
+| 04-loops | `generateEmails`, `retry` (синхронний), `findFirstFailed` — лише цикли |
+| 05-functions | `buildUser`, `formatTestName`, «знайди баг» зі стрілкою без return, `countMatching`, `negate` |
+| 06-strings | `normalizeText`, `isSameText`, `parseCartCount`, `maskCardNumber`, `slugify`, `buildUrl` |
+| 07-arrays | `last`, `sortPrices` (без мутації), `unique`, `chunk`, `arraysEqual` — без map/filter |
+| 08-array-methods | аналіз звіту прогону: `getFailedTitles`, `totalDuration`, `countByStatus`, `findSlowest`, `isRunGreen`, `byTag`, `sortByDurationDesc` |
+| 09-objects | `pick`, `missingFields` (`Object.hasOwn`), `countKeys`, `getByPath`, `deepEqual` |
+| 10-destructuring-spread | `createUser(overrides)` (без спільного `address`), `withoutPassword`, `splitHeader`, `formatTestName({...})`, `updateItemQty` |
+| 11-scope-closures | `createIdGenerator`, `createCounter`, `once`, `memoize` |
+| 12-errors | `assertEqual`, `safeJsonParse`, `parsePrice`, `withCleanup`, `loadFixture` (`cause`) |
+| 13-modules | багатофайлова: `src/config.js`, `data/users.js`, `checkout.js`, `summary.js` (переписати з CommonJS), barrel `index.js`; тест запускає `index.js` у чистому Node |
+| 14-classes | `Cart` (`#items`, геттери, `this` у колбеку), `ApiClient` (`static forEnv`), `User`/`AdminUser extends` |
+
+Конструкції з пізніших уроків, якщо потрібні раніше, дано шаблоном у «Практиці» (як в еталоні).
 
 ### Як оформлювати «Практику» в уроці
 
@@ -79,3 +101,16 @@ npm run verify:solutions && npm run test:site
 - Перевірено: `verify:solutions` 55/55, `test:site` 9/9.
 - Нотатки сесій тепер комітяться (раніше були локальні) — для роботи з macOS-ноутбука.
 - Відомо: GitHub попереджає про Node 20 у `actions/*@v4` — можна оновити версії дій окремим комітом.
+
+### 2026-11-19 — сесія 3 (macOS-ноутбук)
+
+- Перший запуск на macOS: `verify:solutions` 55/55, `test:site` 9/9 — bash-ката працюють.
+  На ноутбуці nvm за замовчуванням дає Node 20 → Astro не збирається; потрібен `nvm use 24` (див. LOCAL_NOTES).
+- Написано модуль 01 повністю: уроки 02–14 + 13 ката (власник дав свободу дій, обсяг — у таблиці вище).
+  Кожна ката перевірена: еталон зелений, порожня заглушка падає з підказками без краху імпорту.
+- `progress.spec.ts`: тест «ненаписані уроки — у розробці» тепер дивиться на модуль 02
+  (модуль 01 більше не має заглушок). Коли писатимемо модуль 02 — перенести на модуль 03.
+- CI: дії оновлено до версій на Node 24 (checkout@v7, setup-node@v7, configure-pages@v6,
+  upload-artifact@v7, upload-pages-artifact@v5, deploy-pages@v5). На CI ще не перевірено — перший push покаже.
+- Перевірено: `verify:solutions` 454/454 (18 файлів), `test:site` 9/9.
+
