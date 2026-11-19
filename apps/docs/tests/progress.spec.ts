@@ -78,10 +78,13 @@ test.describe('Пропуск модуля після самоперевірки
 	});
 
 	test('ненаписані уроки показані як «у розробці» і не є посиланнями', async ({ page }) => {
-		await page.goto(MODULE);
-		const row = lessonRow(page, 'Умовні оператори');
+		// Модуль 02 ще не написаний — його уроки мають бути заглушками.
+		await page.goto('modules/02-async/');
+		const row = lessonRow(page, 'Колбеки');
 		await expect(row.getByText('у розробці')).toBeVisible();
 		await expect(row.getByRole('link')).toHaveCount(0);
+
+		await page.goto(MODULE);
 		await expect(lessonRow(page, LESSON_TITLE).getByRole('link', { name: LESSON_TITLE })).toBeVisible();
 	});
 });

@@ -1,0 +1,305 @@
+---
+title: Об'єкти
+description: Доступ до властивостей, in і Object.hasOwn, Object.keys/entries, посилання й копіювання, JSON і перевірка вкладених відповідей API.
+sidebar:
+  order: 9
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Контракт API каже: у відповіді `GET /users/42` поле `middleName` **обов'язкове**, а значення може
+бути `null`. Ти пишеш перевірку:
+
+```js
+const user = await response.json();
+
+if (!user.middleName) {
+  throw new Error('Немає поля middleName');
+}
+```
+
+Для користувача без по батькові бекенд правильно повертає `"middleName": null` — а тест падає.
+Перевірка змішала два різні питання: «чи є в об'єкті такий **ключ**» і «яке в ньому **значення**».
+Відповідь `{ "middleName": null }` відповідає контракту, а `{}` — ні, і тест має їх розрізняти.
+Для питання «чи є ключ» у JavaScript є окремий інструмент — і ти його сьогодні вивчиш.
+
+Майже кожна відповідь API — це об'єкт з вкладеними об'єктами й масивами. Звернутися до
+`order.customer.address.city`, порівняти дві відповіді, скопіювати тестові дані так, щоб не зіпсувати
+оригінал, — це щоденна робота автотестувальника.
+
+## Концепція
+
+### Літерал об'єкта і доступ до властивостей
+
+Об'єкт — набір пар «ключ: значення» (властивостей, properties):
+
+```js
+const user = {
+  id: 42,
+  name: 'Ann',
+  'e-mail': 'ann@example.test', // ключ з дефісом — лише в лапках
+  address: { city: 'Київ' },
+};
+
+user.name          // 'Ann'          — через крапку (dot notation)
+user['e-mail']     // 'ann@...'      — через квадратні дужки (bracket notation)
+user.address.city  // 'Київ'
+user.phone         // undefined      — неіснуюча властивість не є помилкою
+```
+
+Крапка — для звичайних імен. Дужки — коли ключ має «незручні» символи або **зберігається у змінній**:
+
+```js
+const field = 'name';
+user[field]   // 'Ann'
+user.field    // undefined — шукає ключ з назвою 'field'!
+```
+
+Ключ можна обчислити й під час створення об'єкта (computed property):
+
+```js
+const header = 'Authorization';
+const headers = { [header]: 'Bearer abc' }; // { Authorization: 'Bearer abc' }
+```
+
+### Додавання, зміна, видалення
+
+```js
+user.role = 'admin';   // додати
+user.name = 'Bob';     // змінити
+delete user['e-mail']; // видалити ключ повністю
+```
+
+### Чи є ключ: `in`, `Object.hasOwn` і `!== undefined`
+
+```js
+const response = { id: 1, middleName: null, nickname: undefined };
+
+response.middleName !== undefined  // true
+response.nickname !== undefined    // false ← ключ є, але перевірка каже «немає»
+response.phone !== undefined       // false
+
+Object.hasOwn(response, 'nickname') // true  ← ключ присутній
+Object.hasOwn(response, 'phone')    // false ← ключа немає
+'nickname' in response              // true
+```
+
+`Object.hasOwn` перевіряє лише **власні** ключі об'єкта. Оператор `in` бачить і успадковані
+(наприклад, `'toString' in {}` — `true`), тому для перевірки даних з API надійніший `Object.hasOwn`.
+
+### `Object.keys`, `values`, `entries`, `fromEntries`
+
+```js
+const counts = { passed: 10, failed: 2 };
+
+Object.keys(counts)    // ['passed', 'failed']
+Object.values(counts)  // [10, 2]
+Object.entries(counts) // [['passed', 10], ['failed', 2]]
+
+Object.fromEntries([['a', 1], ['b', 2]]) // { a: 1, b: 2 }
+```
+
+Ці методи перетворюють об'єкт на масив — і далі працюють усі методи з уроку 08.
+Запис `[status, count]` нижче розпаковує пару «ключ-значення» — це деструктуризація з уроку 10:
+
+```js
+for (const [status, count] of Object.entries(counts)) {
+  console.log(`${status}: ${count}`);
+}
+
+// залишити лише ненульові лічильники
+const nonZero = Object.fromEntries(Object.entries(counts).filter(([, count]) => count > 0));
+```
+
+Кількість ключів — `Object.keys(obj).length`: у об'єкта немає властивості `length`.
+
+### Посилання і копіювання
+
+Змінна з об'єктом зберігає не сам об'єкт, а **посилання** (reference) на нього:
+
+```js
+const a = { city: 'Київ' };
+const b = a;      // копія посилання, а не об'єкта
+b.city = 'Львів';
+a.city            // 'Львів' — це той самий об'єкт
+```
+
+Тому `===` для об'єктів порівнює **посилання**, а не вміст:
+
+```js
+{ id: 1 } === { id: 1 }  // false — два різні об'єкти
+a === b                  // true  — одне посилання
+```
+
+Порівняти вміст можна, обійшовши ключі (це твоє завдання в каті) або в тесті через
+`expect(actual).toEqual(expected)` — його ти зустрінеш у Playwright і Vitest.
+
+Поверхнева копія (shallow copy) створює новий об'єкт, але вкладені об'єкти лишаються спільними:
+
+```js
+const original = { name: 'Ann', address: { city: 'Київ' } };
+const copy = Object.assign({}, original); // у уроці 10 — коротший запис через spread
+copy.name = 'Bob';           // original.name не змінився
+copy.address.city = 'Львів'; // original.address.city — теж 'Львів'!
+```
+
+Глибока копія (deep copy) — `structuredClone(original)`: копіює всі рівні вкладеності.
+
+### JSON
+
+JSON — текстовий формат, у якому API передають дані. Перетворення в обидва боки:
+
+```js
+const text = JSON.stringify({ id: 1, tags: ['a'] }); // '{"id":1,"tags":["a"]}'
+const data = JSON.parse('{"id":1,"tags":["a"]}');    // { id: 1, tags: ['a'] }
+
+JSON.stringify({ a: 1, b: undefined }) // '{"a":1}' — undefined зникає!
+JSON.stringify({ a: 1 }, null, 2)      // з відступами, зручно для логів
+```
+
+Старий трюк `JSON.parse(JSON.stringify(obj))` для глибокої копії губить `undefined`, функції й дати.
+Для копіювання є `structuredClone`.
+
+### Optional chaining на вкладених відповідях
+
+Оператор `?.` з уроку 02 особливо корисний для глибоко вкладених даних:
+
+```js
+const city = response.data?.user?.address?.city; // undefined замість TypeError
+const firstItemId = response.items?.[0]?.id;
+```
+
+Але не зловживай: якщо поле **має бути** за контрактом, `?.` сховає баг. Тест має впасти з
+зрозумілим повідомленням, а не тихо отримати `undefined`.
+
+### Методи в об'єктах
+
+Значенням властивості може бути функція — тоді це метод:
+
+```js
+const api = {
+  baseUrl: 'https://example.test',
+  url(path) {
+    return `${this.baseUrl}${path}`;
+  },
+};
+api.url('/users'); // 'https://example.test/users'
+```
+
+`this` усередині методу — об'єкт, на якому метод викликали. Детально до цього повернемося в уроці 14
+про класи.
+
+## Типові помилки
+
+1. **`obj.key`, коли ключ у змінній.** `user.field` шукає ключ `'field'`. Для змінної — `user[field]`.
+2. **`obj.key !== undefined` як перевірка наявності поля.** Не відрізняє «ключа немає» від
+   «значення `undefined`». Для контракту API — `Object.hasOwn(obj, key)`.
+3. **Порівняння об'єктів через `===`.** `{ a: 1 } === { a: 1 }` — `false`. Порівнюй вміст.
+4. **«Скопіював» присвоєнням.** `const copy = original` — це те саме посилання. Зміниш копію —
+   зміниш оригінал, і тестові дані «попливуть» між тестами.
+5. **Поверхнева копія для вкладених даних.** `Object.assign` і spread копіюють лише верхній рівень.
+6. **`obj.length`.** У звичайного об'єкта його немає: `Object.keys(obj).length`.
+7. **`JSON.stringify` для порівняння об'єктів.** Залежить від порядку ключів:
+   `{ a: 1, b: 2 }` і `{ b: 2, a: 1 }` дадуть різні рядки.
+
+## Документація
+
+Прочитай саме в такому порядку:
+
+1. [javascript.info: Об'єкти](https://uk.javascript.info/object) — українською.
+2. [javascript.info: Копіювання об'єктів та посилання](https://uk.javascript.info/object-copy)
+3. [javascript.info: Object.keys, values, entries](https://uk.javascript.info/keys-values-entries)
+4. [javascript.info: Методи JSON, toJSON](https://uk.javascript.info/json)
+5. [javascript.info: Опціональний ланцюжок '?.'](https://uk.javascript.info/optional-chaining)
+6. Довідник для перевірки деталей: [MDN: Object.hasOwn](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/hasOwn),
+   [MDN: Object.entries](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/entries),
+   [MDN: structuredClone](https://developer.mozilla.org/en-US/docs/Web/API/Window/structuredClone),
+   [MDN: JSON.stringify](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify)
+
+## Практика
+
+Ката: `exercises/01-javascript/09-objects`. П'ять утиліт для перевірки відповідей API: вибрати
+потрібні поля, знайти відсутні обов'язкові поля, порахувати ключі, отримати значення за шляхом
+`'user.address.city'` і порівняти дві відповіді за вмістом.
+
+1. Відкрий у VS Code файл `exercises/01-javascript/09-objects/exercise.js` і прочитай `TODO`.
+2. У терміналі в корені репозиторію запусти перевірку:
+
+   ```sh
+   npm run check -- exercises/01-javascript/09-objects
+   ```
+
+3. Читай повідомлення червоних тестів — це підказки. Пиши код, доки все не стане зеленим.
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+Остання функція, `deepEqual`, найскладніша: їй доведеться викликати саму себе для вкладених
+об'єктів. Така функція називається рекурсивною (recursion). Не поспішай — спершу розв'яжи її для
+плоских об'єктів, потім додай вкладеність.
+
+## Самоперевірка
+
+Відповідай уголос, потім розгорни відповідь.
+
+<details>
+<summary>Коли потрібні квадратні дужки замість крапки?</summary>
+
+Коли ключ зберігається у змінній (`obj[key]`) або містить символи, недопустимі в імені змінної
+(`obj['e-mail']`, `obj['Content-Type']`).
+</details>
+
+<details>
+<summary>Чим `Object.hasOwn(obj, 'x')` відрізняється від `obj.x !== undefined`?</summary>
+
+`Object.hasOwn` перевіряє наявність ключа, незалежно від значення. `obj.x !== undefined` дасть
+`false` і для відсутнього ключа, і для ключа зі значенням `undefined`.
+</details>
+
+<details>
+<summary>Що поверне `{ id: 1 } === { id: 1 }` і чому?</summary>
+
+`false`. `===` для об'єктів порівнює посилання, а це два різні об'єкти з однаковим вмістом.
+</details>
+
+<details>
+<summary>Чим поверхнева копія відрізняється від глибокої?</summary>
+
+Поверхнева (`Object.assign({}, obj)`, spread) створює новий об'єкт лише верхнього рівня; вкладені
+об'єкти лишаються спільними з оригіналом. Глибока (`structuredClone`) копіює всі рівні.
+</details>
+
+<details>
+<summary>Що станеться з полем зі значенням `undefined` після `JSON.stringify`?</summary>
+
+Воно зникне з результату: `JSON.stringify({ a: 1, b: undefined })` — `'{"a":1}'`. У JSON немає
+значення `undefined`.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Як перевірити, чи є в об'єкті певна властивість? Яка різниця між `in`, `Object.hasOwn` і порівнянням з `undefined`?
+- Чому два об'єкти з однаковим вмістом не рівні через `===`?
+- Що таке поверхнева і глибока копія? Як зробити кожну?
+- Як перебрати всі ключі й значення об'єкта?
+- Що роблять `JSON.stringify` і `JSON.parse`? Які значення губляться при серіалізації?
+- Що таке optional chaining і коли його використання в тестах шкідливе?
+</TabItem>
+<TabItem label="English">
+- How do you check whether an object has a certain property? What is the difference between `in`, `Object.hasOwn` and comparing with `undefined`?
+- Why are two objects with the same content not equal with `===`?
+- What is a shallow copy versus a deep copy? How do you make each?
+- How do you iterate over all keys and values of an object?
+- What do `JSON.stringify` and `JSON.parse` do? Which values are lost during serialization?
+- What is optional chaining, and when is using it in tests harmful?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="01-javascript" lesson="09-objects" />

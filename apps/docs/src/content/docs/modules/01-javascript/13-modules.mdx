@@ -1,0 +1,283 @@
+---
+title: "Модулі: import / export"
+description: ES-модулі — іменований і default-експорт, синтаксис import, type module, шляхи з розширенням, barrel-файли і як упізнати CommonJS require.
+sidebar:
+  order: 13
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Перші автотести зазвичай живуть в одному файлі на 800 рядків: адреса сервера, логіни, паролі,
+функції-помічники і самі тести — все разом. Потім адреса staging-сервера змінюється, і ти шукаєш
+`https://staging.shop.test` у дванадцяти місцях. Одне пропустив — половина тестів червона.
+
+Справжній тестовий фреймворк складається з багатьох маленьких файлів:
+
+```
+tests/
+  config.js           ← адреси, таймаути
+  data/users.js       ← тестові користувачі
+  pages/LoginPage.js  ← Page Object (урок 14 і модуль про Playwright)
+  fixtures.js         ← фікстури
+  checkout.spec.js    ← сам тест, який усе це імпортує
+```
+
+Кожен файл — це **модуль** (module). Він сам вирішує, що показати назовні (`export`), і сам каже, що
+йому потрібно (`import`). Playwright, фікстури, Page Object Model — усе тримається на модулях. Без
+них не написати жодного реального тесту.
+
+## Концепція
+
+### Модуль — це файл
+
+У ES-модулях (ECMAScript modules, ESM) кожен файл має **власну** область видимості. Змінні з одного
+файлу не видно в іншому, доки їх явно не експортували й не імпортували.
+
+```js
+// config.js
+const SECRET = 'internal';               // видно лише в config.js
+export const BASE_URL = 'https://shop.test';
+```
+
+### Іменований експорт (named export)
+
+Файл може експортувати скільки завгодно значень, кожне — під своїм ім'ям:
+
+```js
+// config.js
+export const BASE_URL = 'https://shop.test';
+export const DEFAULT_TIMEOUT = 5000;
+
+export function apiUrl(path) {
+  return `${BASE_URL}/api${path}`;
+}
+```
+
+Імпортують їх у фігурних дужках, **точно** тими самими іменами:
+
+```js
+// login.spec.js
+import { BASE_URL, apiUrl } from './config.js';
+import { DEFAULT_TIMEOUT as timeout } from './config.js'; // перейменування через as
+```
+
+Можна взяти все одразу як об'єкт-простір імен (namespace):
+
+```js
+import * as config from './config.js';
+config.BASE_URL;
+```
+
+### Default-експорт (default export)
+
+Один — і лише один — головний експорт файлу:
+
+```js
+// data/users.js
+const users = [
+  { role: 'admin', email: 'admin@shop.test' },
+  { role: 'customer', email: 'customer@shop.test' },
+];
+
+export default users;
+```
+
+Імпортують його **без** фігурних дужок і під **будь-яким** ім'ям:
+
+```js
+import users from './data/users.js';
+import testUsers from './data/users.js'; // теж працює — ім'я обирає той, хто імпортує
+```
+
+Обидва види можна поєднувати в одному файлі й одному імпорті:
+
+```js
+import users, { findUserByRole } from './data/users.js';
+```
+
+<Aside type="tip" title="Що обрати">
+У тестових фреймворках частіше використовують **іменовані** експорти: VS Code краще їх
+автодоповнює, а одруківка в імені одразу дає помилку. Default зручний, коли файл має одну очевидну
+«головну річ» — наприклад, клас Page Object.
+</Aside>
+
+### `"type": "module"` і шляхи до файлів
+
+Node.js має знати, що `.js`-файли проєкту — це ES-модулі. Для цього в `package.json` пишуть:
+
+```json
+{
+  "type": "module"
+}
+```
+
+Ти вже робив це в кату [Node.js і npm](/modules/00-environment/02-node-npm/). Без цього поля Node.js
+вважатиме файли старим форматом CommonJS і впаде на першому `import`.
+
+Правила шляхів у Node.js ESM:
+
+- **Відносний шлях** до свого файлу починається з `./` або `../`: `'./config.js'`, `'../data/users.js'`.
+- **Розширення `.js` обов'язкове.** `import { x } from './config'` у Node.js — помилка
+  `ERR_MODULE_NOT_FOUND`. (Деякі інструменти, як-от бандлери, прощають це, але Node.js — ні.)
+- **Пакет** з `node_modules` імпортують за назвою, без шляху: `import { test } from '@playwright/test'`.
+
+### Реекспорт і barrel-файли
+
+Щоб тести не пам'ятали, де саме лежить кожна утиліта, роблять один файл-«вітрину» — **barrel**
+(«бочка»). Він нічого не робить сам, лише реекспортує:
+
+```js
+// index.js
+export { BASE_URL, DEFAULT_TIMEOUT } from './config.js';   // вибрані іменовані
+export * from './helpers.js';                              // усі іменовані
+export { default as users } from './data/users.js';        // default → під ім'ям users
+```
+
+Тепер тест імпортує все з одного місця:
+
+```js
+import { BASE_URL, users } from './index.js';
+```
+
+Зверни увагу: `export *` **не** переносить default-експорт — його реекспортують явно, як у третьому рядку.
+
+### Модуль виконується один раз
+
+Скільки б файлів не імпортували `config.js`, його код виконається **один раз**, і всі отримають ті
+самі об'єкти. Якщо один тест змінить масив `users` (`users.push(...)`), інший побачить зміну. Тому
+спільні тестові дані не змінюють — копіюють (`[...users]`, урок 10).
+
+### CommonJS: як упізнати старий код
+
+До ESM у Node.js був свій формат — **CommonJS** (CJS). Ти точно зустрінеш його в старих проєктах,
+конфігах і відповідях на Stack Overflow:
+
+```js
+// CommonJS — старий стиль
+const { BASE_URL } = require('./config');
+module.exports = { summarize };
+```
+
+```js
+// ESM — сучасний стиль, яким пишемо в курсі
+import { BASE_URL } from './config.js';
+export { summarize };
+```
+
+Ознаки CommonJS: `require(...)`, `module.exports`, `exports.x = ...`, файли `.cjs`. У новому коді
+використовуй `import`/`export`. Змішувати обидва стилі в одному файлі не можна: у ES-модулі `require`
+просто не визначений.
+
+## Типові помилки
+
+1. **Пропущене розширення.** `from './config'` → `ERR_MODULE_NOT_FOUND`. У Node.js завжди пиши `.js`.
+2. **Фігурні дужки не там.** Default імпортують **без** дужок, іменований — **з** ними.
+   `import { users } from './users.js'` для `export default users` — помилка
+   `does not provide an export named 'users'`.
+3. **Одруківка в імені іменованого імпорту.** ESM перевіряє імена **до** запуску коду, тож падає весь
+   файл, а не один рядок. Прочитай повідомлення: там є і назва файлу, і ім'я, якого бракує.
+4. **`export *` і default.** `export * from './users.js'` не реекспортує default — додай
+   `export { default as users } from ...`.
+5. **Шлях від неправильної теки.** Відносний шлях рахується від **файлу, в якому написаний `import`**,
+   а не від кореня проєкту чи місця, звідки ти запускаєш команду.
+6. **`require` у файлі з `import`.** У ES-модулі `require is not defined`. Переписуй на `import`.
+
+## Документація
+
+Прочитай саме в такому порядку:
+
+1. [javascript.info: Модулі, вступ](https://uk.javascript.info/modules-intro)
+2. [javascript.info: Експорт та імпорт](https://uk.javascript.info/import-export) — усі форми синтаксису,
+   включно з реекспортом.
+3. [Node.js: Modules — ECMAScript modules](https://nodejs.org/api/esm.html) — розділи «Enabling» і
+   «Mandatory file extensions».
+4. Довідник: [MDN: JavaScript modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules),
+   [MDN: export](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/export),
+   [MDN: import](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import)
+
+## Практика
+
+Ката: `exercises/01-javascript/13-modules`. Тут не один файл, а маленький тестовий проєкт у теці `src/`:
+конфіг, тестові користувачі, функція оформлення замовлення, barrel-файл і старий CommonJS-модуль, який
+треба переписати на ESM. Тести імпортують твої файли так само, як імпортували б справжні автотести, і
+окремо запускають `src/index.js` у чистому Node.js.
+
+1. Відкрий у VS Code теку `exercises/01-javascript/13-modules/`, прочитай `README.md` і `TODO` у
+   файлах `src/`.
+2. У терміналі в корені репозиторію запусти перевірку:
+
+   ```sh
+   npm run check -- exercises/01-javascript/13-modules
+   ```
+
+3. Читай повідомлення червоних тестів — це підказки. Пиши код, доки все не стане зеленим.
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+## Самоперевірка
+
+Відповідай уголос, потім розгорни відповідь.
+
+<details>
+<summary>Чим іменований експорт відрізняється від default?</summary>
+
+Іменованих може бути багато, імпортують їх у `{ }` точно за іменем. Default — один на файл, імпортують
+без дужок під будь-яким ім'ям.
+</details>
+
+<details>
+<summary>Чому `import { x } from './config'` падає в Node.js?</summary>
+
+У Node.js ESM розширення файлу обов'язкове: треба `'./config.js'`.
+</details>
+
+<details>
+<summary>Що таке barrel-файл і навіщо він тестам?</summary>
+
+Файл (зазвичай `index.js`), який лише реекспортує значення з інших модулів. Тести імпортують усе з
+одного місця і не залежать від того, як влаштовані теки всередині.
+</details>
+
+<details>
+<summary>Як відрізнити CommonJS від ESM з першого погляду?</summary>
+
+CommonJS — `require(...)` і `module.exports`. ESM — `import` і `export`.
+</details>
+
+<details>
+<summary>Два тестові файли імпортують один масив `users`. Один додав туди користувача. Що побачить другий?</summary>
+
+Доданого користувача: модуль виконується один раз, і всі імпорти отримують той самий масив. Тому
+спільні дані не змінюють, а копіюють.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Що таке модулі в JavaScript і навіщо вони потрібні?
+- Яка різниця між іменованим і default-експортом?
+- Чим ES-модулі відрізняються від CommonJS?
+- Що робить `"type": "module"` у `package.json`?
+- Що таке реекспорт і barrel-файл?
+- Скільки разів виконується код модуля, якщо його імпортують у п'яти файлах?
+- Як ви організовуєте файли в тестовому фреймворку: конфіг, дані, Page Objects?
+</TabItem>
+<TabItem label="English">
+- What are modules in JavaScript, and why do we need them?
+- What is the difference between a named export and a default export?
+- How do ES modules differ from CommonJS?
+- What does `"type": "module"` in `package.json` do?
+- What is a re-export, and what is a barrel file?
+- How many times does a module's code run if five files import it?
+- How do you organise files in a test framework: config, data, Page Objects?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="01-javascript" lesson="13-modules" />

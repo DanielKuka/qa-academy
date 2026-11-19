@@ -1,0 +1,328 @@
+---
+title: Класи і this
+description: class, constructor, поля, методи, геттери, static, приватні #поля, extends і super, правила this і як не загубити this у колбеку — фундамент Page Object Model.
+sidebar:
+  order: 14
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Ось як виглядає тест логіну в реальному проєкті на Playwright:
+
+```js
+test('користувач входить у систему', async ({ page }) => {
+  const loginPage = new LoginPage(page);
+  await loginPage.open();
+  await loginPage.login('customer@shop.test', 'Customer123!');
+  await expect(loginPage.errorMessage).toBeHidden();
+});
+```
+
+Жодного селектора в самому тесті. Усі локатори й дії сторінки сховані в **класі** `LoginPage`. Змінилась
+верстка форми — правиш один клас, а не сорок тестів. Це **Page Object Model** (POM) — найпоширеніший
+патерн в UI-автоматизації, і без класів його не написати.
+
+А ще класи — це API-клієнти, конструктори тестових даних, власні типи помилок (урок 12). І класичне
+питання співбесіди: «чому `this` став `undefined`?».
+
+## Концепція
+
+### Клас, конструктор, екземпляр
+
+**Клас** (class) — це шаблон для створення об'єктів з однаковою будовою й поведінкою. Об'єкт, створений
+за шаблоном, називають **екземпляром** (instance).
+
+```js
+class User {
+  constructor(email, role) {   // викликається при new User(...)
+    this.email = email;        // this — об'єкт, який зараз створюється
+    this.role = role;
+  }
+
+  describe() {                 // метод — функція, спільна для всіх екземплярів
+    return `${this.email} (${this.role})`;
+  }
+}
+
+const admin = new User('admin@shop.test', 'admin');
+admin.describe(); // 'admin@shop.test (admin)'
+```
+
+Без `new` клас не викликати: `User('a', 'b')` — `TypeError`.
+
+### Поля класу
+
+Поля можна оголосити прямо в тілі класу — так одразу видно, з чого складається об'єкт:
+
+```js
+class ApiClient {
+  retries = 3;                 // поле з початковим значенням
+
+  constructor(baseUrl) {
+    this.baseUrl = baseUrl;
+  }
+}
+```
+
+### Геттери (getter)
+
+Геттер виглядає як властивість, але обчислюється щоразу, коли його читають:
+
+```js
+class TestRun {
+  constructor(results) {
+    this.results = results;
+  }
+
+  get passRate() {             // читається без дужок: run.passRate
+    const passed = this.results.filter((r) => r.status === 'passed').length;
+    return passed / this.results.length;
+  }
+}
+
+new TestRun([{ status: 'passed' }, { status: 'failed' }]).passRate; // 0.5
+```
+
+### Статичні члени (static)
+
+`static` належить самому класу, а не екземплярам. Зручно для «фабрик» і констант:
+
+```js
+class User {
+  static DEFAULT_PASSWORD = 'Test123!';
+
+  static guest() {
+    return new User('guest@shop.test', 'guest');
+  }
+  // ...
+}
+
+User.DEFAULT_PASSWORD; // 'Test123!'
+User.guest();          // новий екземпляр
+```
+
+### Приватні поля `#`
+
+Поле з `#` на початку видно **лише всередині класу**. Ззовні його не прочитати й не змінити — це
+справжня приватність, як у замиканнях з уроку 11:
+
+```js
+class Cart {
+  #items = [];
+
+  add(item) {
+    this.#items.push(item);
+  }
+
+  get count() {
+    return this.#items.length;
+  }
+}
+
+const cart = new Cart();
+cart.add({ sku: 'sku-1' });
+cart.count;    // 1
+cart.#items;   // SyntaxError — доступу ззовні немає
+```
+
+### Наслідування: `extends` і `super`
+
+Клас може розширити інший: успадкувати все і додати своє.
+
+```js
+class AdminUser extends User {
+  constructor(email) {
+    super(email, 'admin');     // спершу — конструктор батьківського класу
+    this.permissions = ['users:delete'];
+  }
+
+  describe() {
+    return `${super.describe()} [${this.permissions.length} прав]`; // виклик батьківського методу
+  }
+}
+```
+
+Правило: у конструкторі нащадка `super(...)` викликають **до** першого звернення до `this`.
+
+У POM наслідування використовують для спільної логіки: `class BasePage` з методом `open()`, а
+`LoginPage extends BasePage`. Але не захоплюйся: глибокі ланцюжки `A extends B extends C extends D`
+важко читати. Частіше краще передати потрібний об'єкт у конструктор.
+
+### Як працює `this`
+
+`this` — це не «клас» і не «місце, де написана функція». Це **об'єкт перед крапкою в момент виклику**:
+
+```js
+const cart = new Cart();
+cart.add(item);   // this всередині add — це cart
+```
+
+А тепер пастка. Передаємо метод як колбек — і крапки в момент виклику вже немає:
+
+```js
+const items = [{ sku: 'a' }, { sku: 'b' }];
+items.forEach(cart.add);  // TypeError: Cannot read properties of undefined (reading '#items')
+```
+
+`forEach` викликає функцію просто як `add(item)` — без `cart.` попереду, тож `this` не є `cart`
+(у класах це `undefined`). Метод **загубив `this`**. Три способи це виправити:
+
+```js
+// 1. Стрілкова обгортка в місці виклику
+items.forEach((item) => cart.add(item));
+
+// 2. bind — створює копію функції з назавжди прив'язаним this
+items.forEach(cart.add.bind(cart));
+
+// 3. Метод як стрілкове поле класу — this прив'язаний до екземпляра одразу
+class Cart {
+  #items = [];
+  add = (item) => {
+    this.#items.push(item);
+  };
+}
+items.forEach(cart.add); // працює
+```
+
+Стрілкові функції не мають власного `this` — вони беруть його з місця, де їх створили. Для поля класу це
+конструктор, тобто сам екземпляр.
+
+<Aside type="tip" title="Що з цього для автотестів">
+Ось як буде виглядати твій перший Page Object у модулі про Playwright. Зараз зверни увагу лише на
+будову: конструктор отримує `page`, поля зберігають локатори, методи описують дії користувача.
+
+```js
+export class LoginPage {
+  constructor(page) {
+    this.page = page;
+    this.emailInput = page.getByLabel('Email');
+    this.passwordInput = page.getByLabel('Пароль');
+    this.submitButton = page.getByRole('button', { name: 'Увійти' });
+  }
+
+  async login(email, password) {
+    await this.emailInput.fill(email);
+    await this.passwordInput.fill(password);
+    await this.submitButton.click();
+  }
+}
+```
+
+`async`/`await` пояснимо в модулі 02.
+</Aside>
+
+## Типові помилки
+
+1. **Загублений `this` у колбеку.** `array.forEach(obj.method)`, `button.on('click', obj.method)` —
+   `this` вже не `obj`. Обгорни у стрілку, використай `bind` або оголоси метод стрілковим полем.
+2. **Забутий `this.`** Усередині методу `items.push(x)` замість `this.items.push(x)` — `ReferenceError`
+   або, гірше, зміна зовнішньої змінної з тим самим ім'ям.
+3. **Звернення до `this` до `super()`** у конструкторі нащадка — `ReferenceError`.
+4. **Виклик геттера з дужками.** `cart.total()` для `get total()` — `TypeError: cart.total is not a function`.
+5. **Публічний масив, який змінюють ззовні.** `cart.items.length = 0` з тесту ламає інваріанти класу.
+   Тримай внутрішній стан у `#`-полях, а назовні віддавай копію.
+6. **Клас там, де досить функції.** Якщо в класу немає стану, а лише один метод — можливо, це просто
+   функція. Класи потрібні, коли дані й поведінка живуть разом.
+
+## Документація
+
+Прочитай саме в такому порядку:
+
+1. [javascript.info: Базовий синтаксис класу](https://uk.javascript.info/class)
+2. [javascript.info: Наслідування класу](https://uk.javascript.info/class-inheritance)
+3. [javascript.info: Статичні властивості та методи](https://uk.javascript.info/static-properties-methods)
+4. [javascript.info: Приватні та захищені властивості й методи](https://uk.javascript.info/private-protected-properties-methods)
+5. [javascript.info: Прив'язка контексту до функції](https://uk.javascript.info/bind) — про втрату `this`
+   і `bind`.
+6. Довідник: [MDN: Classes](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes),
+   [MDN: this](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/this),
+   [MDN: Private properties](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes/Private_properties)
+7. Наперед: [Playwright: Page object models](https://playwright.dev/docs/pom) — поки просто погортай.
+
+## Практика
+
+Ката: `exercises/01-javascript/14-classes`. Три класи без браузера, але з реальної тестової
+інфраструктури: кошик із приватним станом, міні-клієнт API і користувачі з наслідуванням. Один із
+тестів передає метод як колбек — перевір, що `this` не загубився.
+
+1. Відкрий у VS Code файл `exercises/01-javascript/14-classes/exercise.js` і прочитай `TODO`.
+2. У терміналі в корені репозиторію запусти перевірку:
+
+   ```sh
+   npm run check -- exercises/01-javascript/14-classes
+   ```
+
+3. Читай повідомлення червоних тестів — це підказки. Пиши код, доки все не стане зеленим.
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+## Самоперевірка
+
+Відповідай уголос, потім розгорни відповідь.
+
+<details>
+<summary>Що робить `constructor` і коли він викликається?</summary>
+
+Ініціалізує новий екземпляр: записує початкові дані в `this`. Викликається автоматично при `new ClassName(...)`.
+</details>
+
+<details>
+<summary>Чим `#items` відрізняється від `items` або `_items`?</summary>
+
+`#items` — справді приватне поле: ззовні класу до нього не дістатися (синтаксична помилка). `_items` —
+лише домовленість «не чіпай», технічно це звичайна публічна властивість.
+</details>
+
+<details>
+<summary>Чому `[1, 2].forEach(cart.add)` може впасти?</summary>
+
+`forEach` викликає функцію без об'єкта перед крапкою, тож `this` всередині `add` уже не `cart`.
+Виправлення: `(x) => cart.add(x)`, `cart.add.bind(cart)` або стрілкове поле класу.
+</details>
+
+<details>
+<summary>Навіщо `super()` у конструкторі нащадка?</summary>
+
+Він викликає конструктор батьківського класу, який створює й ініціалізує `this`. До цього виклику
+звертатися до `this` не можна.
+</details>
+
+<details>
+<summary>Що таке Page Object Model і до чого тут класи?</summary>
+
+Патерн, де кожна сторінка (або компонент) застосунку представлена класом: поля — локатори, методи — дії
+користувача. Тести викликають методи й не знають про селектори, тож зміни верстки правляться в одному місці.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Що таке клас у JavaScript? Чим він відрізняється від функції-конструктора?
+- Що таке `this` і від чого залежить його значення?
+- Чому метод, переданий як колбек, втрачає `this`? Як це виправити?
+- Чим стрілкова функція відрізняється від звичайної щодо `this`?
+- Що роблять `extends` і `super`?
+- Як зробити поле приватним? Чим `#field` відрізняється від `_field`?
+- Що таке `static`-метод? Наведіть приклад.
+- Що таке Page Object Model і які в нього переваги?
+</TabItem>
+<TabItem label="English">
+- What is a class in JavaScript? How does it differ from a constructor function?
+- What is `this`, and what determines its value?
+- Why does a method passed as a callback lose `this`? How do you fix it?
+- How do arrow functions differ from regular functions regarding `this`?
+- What do `extends` and `super` do?
+- How do you make a field private? How does `#field` differ from `_field`?
+- What is a `static` method? Give an example.
+- What is the Page Object Model, and what are its benefits?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="01-javascript" lesson="14-classes" />

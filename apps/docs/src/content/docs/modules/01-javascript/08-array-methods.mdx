@@ -1,0 +1,286 @@
+---
+title: map, filter, reduce, find
+description: Колбеки, методи масивів map/filter/find/some/every/reduce, ланцюжки, sort з компаратором і чому forEach — не map.
+sidebar:
+  order: 8
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Нічний прогін завершився, і в тебе на руках звіт — масив результатів:
+
+```js
+const results = [
+  { title: 'login works', status: 'passed', durationMs: 1200, tags: ['@smoke'] },
+  { title: 'checkout by card', status: 'failed', durationMs: 8400, tags: ['@payments'] },
+  { title: 'export to PDF', status: 'skipped', durationMs: 0, tags: [] },
+  // ...ще 800 рядків
+];
+```
+
+Керівник питає: «Що впало? Скільки тривав прогін? Чи зелений smoke?». Можна написати три цикли `for`
+з лічильниками й тимчасовими масивами. А можна так:
+
+```js
+const failed = results.filter((r) => r.status === 'failed').map((r) => r.title);
+const smokeGreen = results
+  .filter((r) => r.tags.includes('@smoke'))
+  .every((r) => r.status === 'passed');
+```
+
+Методи масивів — це мова, якою автотестувальник щодня «розпитує» дані: відповіді API, списки
+елементів сторінки, звіти. І коли ти читатимеш чужі тести на Playwright, `map` і `filter` будуть
+у кожному другому файлі.
+
+## Концепція
+
+### Колбек: функція, яку викликає метод
+
+Колбек (callback) — це функція, яку ти **передаєш** іншій функції, а та викликає її сама.
+Методи масивів викликають колбек для кожного елемента і передають йому `(element, index, array)`:
+
+```js
+[10, 20, 30].map((value, index) => `${index}: ${value}`);
+// ['0: 10', '1: 20', '2: 30']
+```
+
+Найчастіше потрібен лише перший аргумент. Стрілкові функції з уроку 05 тут — ідеальна форма запису.
+
+### `map`: перетворити кожен елемент
+
+`map` повертає **новий** масив тієї самої довжини, де кожен елемент — результат колбека:
+
+```js
+const titles = results.map((r) => r.title);          // ['login works', 'checkout by card', ...]
+const seconds = results.map((r) => r.durationMs / 1000);
+```
+
+### `filter`: залишити потрібні
+
+Колбек повертає `true` або `false` (точніше, truthy/falsy) — і в новий масив потрапляють лише ті
+елементи, для яких він повернув truthy:
+
+```js
+const failed = results.filter((r) => r.status === 'failed');
+const smoke = results.filter((r) => r.tags.includes('@smoke'));
+```
+
+Якщо нічого не підійшло, `filter` поверне порожній масив `[]`, а не `undefined`.
+
+### `find` і `findIndex`: перший, що підходить
+
+```js
+results.find((r) => r.status === 'failed');      // перший упалий тест або undefined
+results.findIndex((r) => r.status === 'failed'); // його індекс або -1
+```
+
+`find` зупиняється на першому збігу. Потрібні **всі** збіги — це `filter`.
+
+### `some` і `every`: питання «так чи ні»
+
+```js
+results.some((r) => r.status === 'failed');   // чи є хоч один упалий?
+results.every((r) => r.status === 'passed');  // чи всі пройшли?
+```
+
+<Aside type="caution" title="every на порожньому масиві">
+`[].every(...)` повертає `true` — «усі нуль елементів підходять». Для звіту це пастка: прогін, у
+якому не запустився жоден тест, виглядатиме зеленим. Порожній результат перевіряй окремо.
+</Aside>
+
+### `reduce`: згорнути масив в одне значення
+
+`reduce` проходить по масиву і «накопичує» результат. Колбек отримує акумулятор (accumulator) —
+те, що накопичено досі, — і поточний елемент. Другий аргумент `reduce` — початкове значення
+акумулятора:
+
+```js
+const total = results.reduce((sum, r) => sum + r.durationMs, 0);
+
+const byStatus = results.reduce(
+  (acc, r) => {
+    acc[r.status] = acc[r.status] + 1;
+    return acc; // ← забути return — найпоширеніша помилка
+  },
+  { passed: 0, failed: 0, skipped: 0 },
+);
+```
+
+Без початкового значення акумулятором стає перший елемент масиву. Це зручно для пошуку максимуму,
+але на порожньому масиві падає:
+
+```js
+[3, 7, 5].reduce((max, n) => (n > max ? n : max)); // 7
+[].reduce((max, n) => (n > max ? n : max));        // TypeError: Reduce of empty array with no initial value
+```
+
+Правило: **завжди передавай початкове значення**, якщо масив може бути порожнім. Або перевір
+довжину до виклику.
+
+### Ланцюжки (chaining)
+
+`map` і `filter` повертають масив — отже, на результаті можна одразу викликати наступний метод:
+
+```js
+const slowFailedTitles = results
+  .filter((r) => r.status === 'failed')
+  .filter((r) => r.durationMs > 5000)
+  .map((r) => r.title);
+```
+
+Кожен крок — на окремому рядку. Так ланцюжок читається як речення: «відфільтруй упалі, потім
+повільні, візьми назви».
+
+### `forEach` проти `map`
+
+`forEach` просто викликає колбек для кожного елемента і **нічого не повертає** (`undefined`):
+
+```js
+const titles = results.forEach((r) => r.title); // undefined!
+results.forEach((r) => console.log(r.title));   // а так — правильно: лише побічна дія
+```
+
+Потрібен новий масив — `map`. Потрібно «зробити щось» з кожним елементом (вивести, надіслати) —
+`forEach` або `for...of`.
+
+<Aside type="note" title="Забігаючи наперед">
+Усередині `forEach` не можна дочекатися асинхронної операції (`await`): він не чекає на колбек.
+У тестах це дає «тест пройшов, а перевірки ще не виконались». Детально — у модулі 02, поки
+просто запам'ятай: для `await` у циклі використовують `for...of`.
+</Aside>
+
+### `sort` з компаратором
+
+Без аргументу `sort` порівнює елементи **як рядки**:
+
+```js
+[1200, 300, 80].sort(); // [1200, 300, 80] — бо '1' < '3' < '8'
+```
+
+Для чисел передай компаратор (comparator) — функцію, що повертає від'ємне число, нуль або додатне:
+
+```js
+[1200, 300, 80].sort((a, b) => a - b); // [80, 300, 1200] — за зростанням
+results.sort((a, b) => b.durationMs - a.durationMs); // найповільніші спочатку
+```
+
+Увага: `sort` **змінює вихідний масив** (mutates) і повертає його ж. Щоб не зіпсувати дані, спершу
+зроби копію: `results.slice().sort(...)` або новий метод `results.toSorted(...)`.
+
+### `flatMap`: коли колбек повертає масив
+
+```js
+const allTags = results.flatMap((r) => r.tags); // ['@smoke', '@payments']
+// map дав би масив масивів: [['@smoke'], ['@payments'], []]
+```
+
+## Типові помилки
+
+1. **Забутий `return` у колбеку з фігурними дужками.** `(r) => { r.title }` повертає `undefined`,
+   і `map` дає масив з `undefined`. Або прибери дужки `(r) => r.title`, або напиши `return`.
+2. **`reduce` без початкового значення** на масиві, який може бути порожнім, — `TypeError`.
+   А в `reduce` з об'єктом-акумулятором — забутий `return acc`.
+3. **`forEach` замість `map`.** `const x = arr.forEach(...)` — це завжди `undefined`.
+4. **`sort()` без компаратора для чисел** — сортування як рядків. І `sort` змінює оригінал: функція,
+   яка «просто знайшла найповільніший тест», переставила весь звіт.
+5. **`every` на порожньому масиві** повертає `true`. Нуль тестів — це не «все зелене».
+6. **`find`, коли потрібен `filter`** (і навпаки). `find` повертає один елемент або `undefined`,
+   `filter` — завжди масив.
+
+## Документація
+
+Прочитай саме в такому порядку:
+
+1. [javascript.info: Методи масивів](https://uk.javascript.info/array-methods) — українською, головне джерело уроку.
+2. [javascript.info: Стрілкові функції, основи](https://uk.javascript.info/arrow-functions-basics) — якщо колбеки ще незвичні.
+3. Довідник для перевірки деталей: [MDN: Array.prototype.reduce](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce),
+   [MDN: Array.prototype.sort](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort),
+   [MDN: Array.prototype.every](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/every),
+   [MDN: Array.prototype.flatMap](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/flatMap)
+
+## Практика
+
+Ката: `exercises/01-javascript/08-array-methods`. Сім функцій для аналізу звіту про прогін тестів:
+назви упалих, загальна тривалість, підсумок за статусами, найповільніший тест, «чи зелений прогін»,
+вибірка за тегом і сортування.
+
+1. Відкрий у VS Code файл `exercises/01-javascript/08-array-methods/exercise.js` і прочитай `TODO`.
+2. У терміналі в корені репозиторію запусти перевірку:
+
+   ```sh
+   npm run check -- exercises/01-javascript/08-array-methods
+   ```
+
+3. Читай повідомлення червоних тестів — це підказки. Пиши код, доки все не стане зеленим.
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+Тести перевіряють і те, що твої функції **не змінюють** вхідний звіт. Це звичайна вимога до
+утиліт у тестовому фреймворку: їх викликають багато разів з тими самими даними.
+
+## Самоперевірка
+
+Відповідай уголос, потім розгорни відповідь.
+
+<details>
+<summary>Чим відрізняються `map`, `filter` і `find` за тим, що вони повертають?</summary>
+
+`map` — новий масив тієї самої довжини з перетвореними елементами. `filter` — новий масив лише з
+елементами, що пройшли перевірку (може бути порожнім). `find` — один елемент або `undefined`.
+</details>
+
+<details>
+<summary>Що станеться з `[].reduce((a, b) => a + b)` і як цього уникнути?</summary>
+
+`TypeError: Reduce of empty array with no initial value`. Треба передати початкове значення другим
+аргументом: `[].reduce((a, b) => a + b, 0)` поверне `0`.
+</details>
+
+<details>
+<summary>Що поверне `results.forEach((r) => r.title)`?</summary>
+
+`undefined`. `forEach` нічого не повертає — він для побічних дій. Для нового масиву потрібен `map`.
+</details>
+
+<details>
+<summary>Чому `[10, 9, 1].sort()` дає `[1, 10, 9]` і чим небезпечний `sort` для вхідних даних?</summary>
+
+Без компаратора елементи порівнюються як рядки: `'1' < '10' < '9'`. Для чисел потрібен
+`(a, b) => a - b`. До того ж `sort` змінює вихідний масив — спершу зроби копію або використай `toSorted`.
+</details>
+
+<details>
+<summary>Що поверне `[].every((r) => r.status === 'passed')`?</summary>
+
+`true`. Для порожнього масиву умова «виконується для всіх» вважається істинною. Якщо порожній
+звіт — це проблема, перевір довжину окремо.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Яка різниця між `map` і `forEach`?
+- Яка різниця між `find` і `filter`?
+- Як працює `reduce`? Навіщо йому початкове значення?
+- Що роблять `some` і `every`? Що вони повертають для порожнього масиву?
+- Чому `[10, 1, 2].sort()` сортує «неправильно»? Як відсортувати числа?
+- Які методи масиву змінюють вихідний масив, а які повертають новий?
+</TabItem>
+<TabItem label="English">
+- What is the difference between `map` and `forEach`?
+- What is the difference between `find` and `filter`?
+- How does `reduce` work? Why does it need an initial value?
+- What do `some` and `every` do? What do they return for an empty array?
+- Why does `[10, 1, 2].sort()` sort "incorrectly"? How do you sort numbers?
+- Which array methods mutate the original array, and which return a new one?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="01-javascript" lesson="08-array-methods" />

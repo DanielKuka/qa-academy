@@ -1,0 +1,266 @@
+---
+title: Масиви
+description: Створення й індекси, push/pop/shift/unshift, includes і indexOf, slice проти splice, пастка sort, копіювання і порівняння масивів.
+sidebar:
+  order: 7
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Тест перевіряє сортування товарів «від дешевих до дорогих»:
+
+```js
+const pricesOnPage = [5, 25, 100];                // що показала сторінка
+const expected = pricesOnPage.sort();             // «відсортуємо і порівняємо»
+
+console.log(expected);                            // [100, 25, 5] ← що?!
+```
+
+Два баги в трьох рядках. Перший: `sort()` за замовчуванням сортує числа **як рядки**, тож `'100'`
+опиняється перед `'25'`. Другий: `sort()` **змінює** вихідний масив — тепер і `pricesOnPage`
+«відсортований», і тест порівнює масив сам із собою. Такий тест буде зеленим навіть тоді, коли
+сортування на сайті повністю зламане.
+
+Масиви — це списки товарів, рядки таблиці, елементи меню, тестові користувачі, результати прогону.
+Знати, які методи **змінюють** масив, а які повертають новий, — обов'язково для автоматизатора.
+
+## Концепція
+
+### Створення, індекси, довжина
+
+```js
+const statuses = ['passed', 'failed', 'skipped'];
+
+statuses[0]                    // 'passed' — індекси з нуля
+statuses[statuses.length - 1]  // 'skipped' — останній елемент
+statuses.at(-1)                // 'skipped' — те саме, коротше
+statuses[10]                   // undefined — помилки немає!
+statuses.length                // 3
+```
+
+Масив (array) може містити значення будь-яких типів, але в тестах краще тримати однотипні дані.
+
+### Додавання і видалення з країв
+
+```js
+const queue = ['test-1', 'test-2'];
+
+queue.push('test-3');      // у кінець   → ['test-1', 'test-2', 'test-3']
+queue.pop();               // з кінця    → повертає 'test-3'
+queue.unshift('test-0');   // на початок → ['test-0', 'test-1', 'test-2']
+queue.shift();             // з початку  → повертає 'test-0'
+```
+
+Усі чотири методи **змінюють** (mutate) масив, на якому їх викликали. Так, навіть якщо масив
+оголошений через `const`: `const` забороняє перепризначення, а не зміну вмісту (згадай урок 01).
+
+### Пошук: `includes` і `indexOf`
+
+```js
+const roles = ['customer', 'admin', 'manager'];
+
+roles.includes('admin')     // true
+roles.indexOf('admin')      // 1
+roles.indexOf('guest')      // -1 — немає
+```
+
+Для перевірки «чи є елемент» використовуй `includes` — він читається однозначно.
+`indexOf` потрібен, коли важлива позиція.
+
+### `slice` проти `splice`
+
+Дві схожі назви — протилежна поведінка:
+
+```js
+const users = ['ann', 'bob', 'eve', 'kim'];
+
+users.slice(1, 3)    // ['bob', 'eve'] — КОПІЯ частини, users не змінився
+users.splice(1, 2)   // ['bob', 'eve'] — ВИРІЗАЄ з масиву!
+console.log(users);  // ['ann', 'kim']
+```
+
+`slice` (як і в рядків) — «подивитися на шматок». `splice` — «вирізати й, можливо, вставити інше».
+У тестовому коді майже завжди потрібен `slice`.
+
+### Пастка `sort`
+
+```js
+const prices = [100, 25, 5];
+
+prices.sort();                    // [100, 25, 5] — порівнює як рядки: '1' < '2' < '5'
+prices.sort((a, b) => a - b);     // [5, 25, 100] — числове сортування за зростанням
+prices.sort((a, b) => b - a);     // [100, 25, 5] — за спаданням
+```
+
+Функція, яку передаємо в `sort`, — це колбек з уроку 05. Вона порівнює два елементи і повертає
+від'ємне число (a перед b), додатне (b перед a) або нуль. Для чисел вистачає `a - b`.
+
+І головне: **`sort` змінює вихідний масив**. Якщо оригінал ще потрібен, спершу зроби копію.
+
+### Копіювання масиву
+
+```js
+const original = [3, 1, 2];
+const copy = original.slice();       // повна копія
+const sorted = copy.sort((a, b) => a - b);
+
+console.log(original);  // [3, 1, 2] — недоторканий
+```
+
+Є й інші способи: `[...original]` (spread — урок 10) і новий `toSorted()`, який сортує без
+мутації. Але `slice()` — найпростіший і зрозумілий.
+
+### `join` і `Array.from`
+
+```js
+['smoke', 'api'].join(', ')                    // 'smoke, api'
+['TC-1', 'TC-2'].join('\n')                    // кожен елемент з нового рядка
+
+Array.from('abc')                              // ['a', 'b', 'c']
+Array.from({ length: 3 }, (_, i) => i + 1)     // [1, 2, 3] — генерація даних
+```
+
+Останній рядок — популярний трюк для тестових даних: «створи масив з N елементів».
+Наприклад, `Array.from({ length: 5 }, (_, i) => 'user' + i + '@test.dev')` дасть п'ять email-адрес.
+
+### Порівняння масивів
+
+```js
+[1, 2] === [1, 2]    // false!
+
+const a = [1, 2];
+const b = a;
+a === b              // true — це ОДИН і той самий масив
+```
+
+Масив — це об'єкт, а `===` для об'єктів порівнює **посилання** (reference), а не вміст: чи це той самий
+масив у пам'яті. Щоб порівняти вміст, треба пройти циклом і порівняти елементи. У тестах це робить
+`expect(actual).toEqual(expected)` — «глибоке» порівняння вмісту, тоді як `toBe` поводиться як `===`.
+
+<Aside type="tip" title="Що з цього для автотестів">
+Перевірка сортування на сторінці: отримай значення, зроби **копію**, відсортуй копію числовим
+компаратором і порівняй з оригіналом через `toEqual`. Якщо відсортувати сам оригінал — тест порівняє
+масив із собою і ніколи не впаде.
+</Aside>
+
+## Типові помилки
+
+1. **`sort()` без компаратора для чисел** — `[10, 9, 1].sort()` дає `[1, 10, 9]`. Для чисел завжди
+   `(a, b) => a - b`.
+2. **Мутація вхідних даних** — `sort`, `push`, `splice`, `reverse` змінюють масив, переданий у функцію.
+   Хелпер «зіпсує» дані іншому тесту. Спершу копіюй через `slice()`.
+3. **`slice` і `splice` переплутано** — `splice` видаляє елементи з оригіналу.
+4. **`===` для порівняння масивів** — завжди `false` для двох різних масивів, навіть однакових за
+   вмістом. В `expect` використовуй `toEqual`.
+5. **Вихід за межі** — `items[items.length]` — це `undefined`, а не останній елемент. Останній —
+   `items.length - 1` або `items.at(-1)`.
+6. **`indexOf(x)` як умова** — `if (items.indexOf(x))` хибне, коли елемент на позиції `0`, і правдиве,
+   коли його немає (`-1`). Використовуй `includes`.
+
+## Документація
+
+Прочитай саме в такому порядку:
+
+1. [javascript.info: Масиви](https://uk.javascript.info/array) — українською, основи і цикли.
+2. [javascript.info: Методи масивів](https://uk.javascript.info/array-methods) — поки лише розділи
+   про `splice`, `slice`, `concat`, пошук (`indexOf`, `includes`) і `sort`. `map`, `filter` і `reduce`
+   розберемо в уроці 08.
+3. Довідник для перевірки деталей: [MDN: Array](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array),
+   [MDN: Array.prototype.sort](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort),
+   [MDN: Array.prototype.slice](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice),
+   [MDN: Array.prototype.splice](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/splice)
+
+## Практика
+
+Ката: `exercises/01-javascript/07-arrays`. П'ять утиліт, з яких складається будь-який тестовий
+фреймворк: останній елемент списку, числове сортування цін без мутації, унікальні значення,
+розбиття користувачів на пакети для паралельних воркерів і порівняння двох масивів.
+
+1. Відкрий у VS Code файл `exercises/01-javascript/07-arrays/exercise.js` і прочитай `TODO`.
+2. У терміналі в корені репозиторію запусти перевірку:
+
+   ```sh
+   npm run check -- exercises/01-javascript/07-arrays
+   ```
+
+3. Читай повідомлення червоних тестів — це підказки. Пиши код, доки все не стане зеленим.
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+Методи `map`, `filter` і `reduce` тут не потрібні — усе розв'язується циклами з уроку 04 і методами
+з цього уроку. Нагадаю шаблон циклу з кроком, більшим за 1:
+
+```js
+for (let i = 0; i < items.length; i += 3) {
+  console.log(i);   // 0, 3, 6, ...
+}
+```
+
+## Самоперевірка
+
+Відповідай уголос, потім розгорни відповідь.
+
+<details>
+<summary>Чому `[10, 9, 1].sort()` повертає `[1, 10, 9]`?</summary>
+
+Без компаратора `sort` перетворює елементи на рядки й порівнює їх посимвольно: `'1' < '10' < '9'`.
+Для чисел потрібен компаратор `(a, b) => a - b`.
+</details>
+
+<details>
+<summary>Які методи з уроку змінюють вихідний масив?</summary>
+
+`push`, `pop`, `shift`, `unshift`, `splice`, `sort` (і `reverse`). `slice`, `includes`, `indexOf`,
+`join` — не змінюють.
+</details>
+
+<details>
+<summary>Як відсортувати масив, не змінюючи оригінал?</summary>
+
+Спершу зробити копію (`items.slice()`), а потім сортувати копію. Або використати `toSorted()`.
+</details>
+
+<details>
+<summary>Чому `[1, 2] === [1, 2]` дає `false`?</summary>
+
+`===` для масивів (як і для всіх об'єктів) порівнює посилання — чи це той самий об'єкт у пам'яті.
+Тут два різні масиви. Вміст порівнюють поелементно або через `toEqual` у тестах.
+</details>
+
+<details>
+<summary>Чим `slice` відрізняється від `splice`?</summary>
+
+`slice` повертає копію частини масиву й нічого не змінює. `splice` вирізає (і може вставляти)
+елементи прямо у вихідному масиві.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Які методи масиву змінюють його, а які — ні?
+- Яка різниця між `slice` і `splice`?
+- Чому `sort()` неправильно сортує числа? Як це виправити?
+- Як скопіювати масив? Що таке поверхнева копія (shallow copy)?
+- Як порівняти два масиви? Чому не працює `===`?
+- Як прибрати дублікати з масиву? (Очікують цикл з `includes` або `new Set`.)
+- Як перевірити, що змінна — масив? (`Array.isArray`.)
+</TabItem>
+<TabItem label="English">
+- Which array methods mutate the array, and which don't?
+- What is the difference between `slice` and `splice`?
+- Why does `sort()` sort numbers incorrectly? How do you fix it?
+- How do you copy an array? What is a shallow copy?
+- How do you compare two arrays? Why doesn't `===` work?
+- How do you remove duplicates from an array? (Expected: a loop with `includes`, or `new Set`.)
+- How do you check that a variable is an array? (`Array.isArray`.)
+</TabItem>
+</Tabs>
+
+<LessonProgress module="01-javascript" lesson="07-arrays" />

@@ -1,0 +1,306 @@
+---
+title: Рядки і шаблонні літерали
+description: Незмінність рядків, шаблонні літерали, пошук і вирізання, trim, split/join, replace, надійне порівняння тексту з UI і числа з тексту.
+sidebar:
+  order: 6
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Тест перевіряє заголовок картки товару:
+
+```js
+const title = await card.textContent();   // '\n    Навушники   Sony\n  '
+if (title === 'Навушники Sony') { ... }   // false — тест червоний
+```
+
+Розробник лише змінив відступи у верстці, а тест упав. Наступного дня дизайнер робить заголовок
+великими літерами через CSS — і тест падає знову. Жодного бага в продукті, лише крихкий тест.
+
+Інший випадок — лічильник кошика показує `Кошик (3)`. Щоб перевірити, що після додавання товару
+стало `4`, треба дістати число з рядка і перетворити його на `number`.
+
+Текст з інтерфейсу, URL, відповіді API, назви тестів, повідомлення у звітах — це рядки.
+Автоматизатор працює з рядками щодня, тож базові методи мають бути в пальцях.
+
+## Концепція
+
+### Лапки і шаблонні літерали
+
+```js
+const single = 'Кошик';
+const double = "Кошик";
+const name = 'Ann';
+const greeting = `Привіт, ${name}!`;   // шаблонний літерал (template literal)
+```
+
+У зворотних лапках (backticks) можна вставляти будь-який вираз через `${...}` і переносити рядки.
+Це зручніше за склеювання через `+`:
+
+```js
+const url = baseUrl + '/products/' + id + '?lang=' + lang;   // легко загубити '/'
+const url2 = `${baseUrl}/products/${id}?lang=${lang}`;         // читається одразу
+```
+
+### Довжина і символи за індексом
+
+```js
+const code = 'TC-042';
+code.length    // 6
+code[0]        // 'T'
+code.at(-1)    // '2' — останній символ
+```
+
+Індекси починаються з `0`. Якщо індекс поза рядком — отримаєш `undefined`.
+
+### Рядки незмінні
+
+Рядок неможливо змінити «на місці» (immutability). Кожен метод повертає **новий** рядок:
+
+```js
+const status = 'passed';
+status.toUpperCase();          // 'PASSED' — новий рядок
+console.log(status);           // 'passed' — оригінал не змінився
+
+const loud = status.toUpperCase();   // результат треба зберегти
+```
+
+### Пошук
+
+```js
+const message = 'Error: Payment declined';
+
+message.includes('Payment')     // true
+message.startsWith('Error')     // true
+message.endsWith('.')           // false
+message.indexOf('Payment')      // 7  — позиція першого входження
+message.indexOf('Success')      // -1 — не знайдено
+```
+
+Усі ці методи **чутливі до регістру**: `'Error'.includes('error')` — `false`.
+
+### Вирізання частини: `slice`
+
+```js
+const orderId = 'ORD-2026-00042';
+orderId.slice(4)        // '2026-00042' — від індексу 4 до кінця
+orderId.slice(4, 8)     // '2026'       — від 4 до 8 (8 не включно)
+orderId.slice(-5)       // '00042'      — останні 5 символів
+```
+
+### Регістр і пробіли
+
+```js
+'  Sony  '.trim()        // 'Sony' — прибирає пробіли, таби і переноси з країв
+'  Sony  '.trimStart()   // 'Sony  '
+'Кошик'.toLowerCase()    // 'кошик'
+'кошик'.toUpperCase()    // 'КОШИК'
+```
+
+`trim()` прибирає пробіли **лише з країв**. Подвійні пробіли всередині рядка лишаються.
+
+### `split` і `join`
+
+```js
+const tags = 'smoke,regression,api';
+tags.split(',')                    // ['smoke', 'regression', 'api']
+'Іван Петренко'.split(' ')         // ['Іван', 'Петренко']
+
+['smoke', 'api'].join(', ')        // 'smoke, api'
+```
+
+`split` робить з рядка масив, `join` — навпаки. Про масиви детально в уроці 07.
+
+### Заміна: `replace` і `replaceAll`
+
+```js
+const price = '1 299,50 ₴';
+price.replace(' ', '')         // '1299,50 ₴'  — лише ПЕРШЕ входження
+price.replaceAll(' ', '')      // '1299,50₴'   — усі входження
+```
+
+### Доповнення: `padStart`
+
+```js
+String(7).padStart(3, '0')         // '007'
+`ORD-${String(42).padStart(6, '0')}`   // 'ORD-000042'
+```
+
+### Регулярні вирази — лише знайомство
+
+Коли треба знайти не конкретний текст, а **шаблон** («будь-яка кількість пробілів», «усі цифри»),
+використовують регулярні вирази (regular expressions). Повна тема велика, тому поки запам'ятай один
+корисний приклад:
+
+```js
+'Навушники    Sony\n'.replaceAll(/\s+/g, ' ')   // 'Навушники Sony '
+```
+
+`/\s+/g` означає «один або більше пробільних символів (пробіл, таб, перенос рядка), усі входження».
+Детальніше — у [javascript.info: Регулярні вирази](https://uk.javascript.info/regular-expressions),
+коли знадобиться. Playwright, до речі, теж приймає регулярні вирази в перевірках тексту.
+
+### Надійне порівняння тексту з UI
+
+Нормалізуй (normalize) обидва рядки однаково, а вже потім порівнюй:
+
+```js
+const actual = '\n  НАВУШНИКИ    Sony ';
+const expected = 'Навушники Sony';
+
+actual === expected                                            // false
+actual.replaceAll(/\s+/g, ' ').trim().toLowerCase() ===
+  expected.toLowerCase()                                       // true
+```
+
+Важливо не перестаратися: якщо регістр — це вимога (наприклад, кнопка має бути саме `OK`, а не `ok`),
+то ігнорувати його не можна. Нормалізуй лише те, що не є предметом перевірки.
+
+### Число з тексту
+
+Текст з UI — завжди рядок. Перед порівнянням з числом його треба перетворити:
+
+```js
+Number('3')            // 3
+Number(' 3 ')          // 3   — пробіли по краях не заважають
+Number('3 шт')         // NaN — будь-який зайвий текст ламає перетворення
+Number('')             // 0   ← підступно: порожній рядок стає нулем!
+parseInt('3 шт', 10)   // 3   — читає цифри з початку і зупиняється
+parseFloat('12.5 кг')  // 12.5
+```
+
+Тож спершу виріж потрібну частину (`slice`, `split`, `replaceAll`), а потім перетворюй через
+`Number(...)` і перевір результат на `NaN`.
+
+<Aside type="tip" title="Що з цього для автотестів">
+Playwright сам вміє ігнорувати зайві пробіли: `toHaveText` нормалізує пробіли, а для часткового
+збігу є `toContainText`. Але щойно ти дістаєш текст через `textContent()` у звичайну змінну —
+нормалізація на тобі.
+</Aside>
+
+## Типові помилки
+
+1. **Виклик методу без збереження результату** — `title.trim();` нічого не змінює, бо рядки незмінні.
+   Пиши `const clean = title.trim();`.
+2. **Порівняння «сирого» тексту з UI** — `textContent` містить переноси й відступи з верстки.
+   Нормалізуй пробіли перед порівнянням.
+3. **`replace` замість `replaceAll`** — замінюється лише перше входження, і баг проявляється тільки на
+   довших даних.
+4. **Склеювання URL через `+`** — подвійні `//` або пропущений `/` між частинами. Використовуй
+   шаблонні літерали і перевіряй краї рядків через `endsWith` / `startsWith`.
+5. **`Number('')` дає `0`** — порожній лічильник «перетворюється» на нуль, і тест зеленіє там, де мав би
+   впасти.
+6. **Чутливість до регістру в `includes`** — `'Error'.includes('error')` — `false`. Якщо регістр не важливий,
+   переведи обидва рядки в один регістр.
+
+## Документація
+
+Прочитай саме в такому порядку:
+
+1. [javascript.info: Рядки](https://uk.javascript.info/string) — українською, усе основне з цього уроку.
+2. [javascript.info: Числа](https://uk.javascript.info/number) — розділ про `parseInt` і `parseFloat`.
+3. Довідник для перевірки деталей: [MDN: String](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String)
+   (список усіх методів зліва),
+   [MDN: Template literals](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals),
+   [MDN: String.prototype.replaceAll](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replaceAll)
+4. Коли захочеш глибше в шаблони: [javascript.info: Регулярні вирази](https://uk.javascript.info/regular-expressions).
+
+## Практика
+
+Ката: `exercises/01-javascript/06-strings`. Шість утиліт для роботи з текстом інтерфейсу: нормалізація
+пробілів, порівняння тексту без урахування регістру, число з лічильника кошика, маскування номера
+картки для звіту, slug для URL і збирання URL без зайвих слешів.
+
+1. Відкрий у VS Code файл `exercises/01-javascript/06-strings/exercise.js` і прочитай `TODO`.
+2. У терміналі в корені репозиторію запусти перевірку:
+
+   ```sh
+   npm run check -- exercises/01-javascript/06-strings
+   ```
+
+3. Читай повідомлення червоних тестів — це підказки. Пиши код, доки все не стане зеленим.
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+У завданні 1 знадобиться регулярний вираз, який ми не розбирали детально. Поки достатньо цього шаблону:
+
+```js
+const oneSpace = text.replaceAll(/\s+/g, ' ');   // будь-які пробіли, таби, переноси → один пробіл
+```
+
+А в завданні 5 можна перебрати рядок по символах тим самим `for...of`, що й масив:
+
+```js
+for (const char of 'Ок!') {
+  console.log(char);   // 'О', 'к', '!'
+}
+```
+
+## Самоперевірка
+
+Відповідай уголос, потім розгорни відповідь.
+
+<details>
+<summary>Що виведе `const s = ' a '; s.trim(); console.log(s.length);`?</summary>
+
+`3`. Рядки незмінні: `trim()` повернув новий рядок `'a'`, але його ніде не зберегли, тож `s` лишився
+`' a '`.
+</details>
+
+<details>
+<summary>Чим `replace` відрізняється від `replaceAll`?</summary>
+
+`replace` з рядком-аргументом замінює лише перше входження, `replaceAll` — усі.
+</details>
+
+<details>
+<summary>Як дістати число 3 з тексту `'Кошик (3)'`?</summary>
+
+Знайти позиції дужок через `indexOf`, вирізати частину між ними через `slice` і перетворити через
+`Number(...)`. Результат варто перевірити на `NaN`.
+</details>
+
+<details>
+<summary>Чому порівнювати `textContent` з очікуваним рядком через `===` напряму — погана ідея?</summary>
+
+`textContent` містить пробіли й переноси з HTML-верстки. Тест падатиме від змін відступів, а не від
+справжніх багів. Спершу нормалізуй пробіли (і регістр, якщо він не є вимогою).
+</details>
+
+<details>
+<summary>Що повертає `Number('')`, і чому це небезпечно?</summary>
+
+`0`. Порожній елемент «перетворюється» на нуль, і перевірка «кошик порожній, тобто 0» може пройти
+навіть тоді, коли лічильник просто не відобразився.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Чи можна змінити рядок у JavaScript? Що таке незмінність (immutability) рядків?
+- Що таке шаблонні літерали і які в них переваги?
+- Яка різниця між `slice` і `substring`?
+- Як перевірити, що рядок містить підрядок, без урахування регістру?
+- Як перетворити рядок на число? Чим відрізняються `Number`, `parseInt` і `parseFloat`?
+- Як би ви порівнювали текст з UI, щоб тест не був крихким?
+- Як розвернути рядок? (Класичне завдання live coding: `split('')`, `reverse()`, `join('')`.)
+</TabItem>
+<TabItem label="English">
+- Can you change a string in JavaScript? What does string immutability mean?
+- What are template literals, and what are their advantages?
+- What is the difference between `slice` and `substring`?
+- How do you check that a string contains a substring, ignoring case?
+- How do you convert a string to a number? How do `Number`, `parseInt` and `parseFloat` differ?
+- How would you compare UI text so that the test is not brittle?
+- How do you reverse a string? (A classic live-coding task: `split('')`, `reverse()`, `join('')`.)
+</TabItem>
+</Tabs>
+
+<LessonProgress module="01-javascript" lesson="06-strings" />

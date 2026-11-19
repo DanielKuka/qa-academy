@@ -1,0 +1,297 @@
+---
+title: Деструктуризація і spread
+description: Деструктуризація масивів і об'єктів, значення за замовчуванням, rest і spread, поверхнева копія та патерн «об'єкт опцій».
+sidebar:
+  order: 10
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Відкрий будь-який тест на Playwright — і перший рядок буде таким:
+
+```js
+test('user can log in', async ({ page, request }) => {
+  await page.goto('/login', { timeout: 10_000 });
+});
+```
+
+`({ page, request })` — це деструктуризація. `{ timeout: 10_000 }` — об'єкт опцій. Без цього
+синтаксису ти просто не прочитаєш жодного сучасного тесту.
+
+А ось баг, який ловлять у кожному фреймворку з генератором тестових даних:
+
+```js
+const defaultUser = { name: 'Test User', address: { city: 'Київ' } };
+
+function createUser(overrides) {
+  return { ...defaultUser, ...overrides };
+}
+
+const ann = createUser({ name: 'Ann' });
+ann.address.city = 'Львів';
+
+createUser().address.city; // 'Львів' — тест, який змінив свого юзера, зіпсував дані всім наступним
+```
+
+Тести починають падати «випадково», залежно від порядку запуску. Причина — поверхнева копія. Сьогодні
+розберемося, як писати такі фабрики правильно.
+
+## Концепція
+
+### Деструктуризація масиву
+
+Деструктуризація (destructuring) — короткий запис «розпакуй значення в окремі змінні»:
+
+```js
+const [first, second] = ['admin', 'viewer', 'guest'];
+first  // 'admin'
+second // 'viewer'
+
+const [, , third] = ['admin', 'viewer', 'guest']; // пропустити елементи
+third  // 'guest'
+
+let a = 1;
+let b = 2;
+[a, b] = [b, a]; // обмін значеннями без тимчасової змінної
+```
+
+### Деструктуризація об'єкта
+
+Для об'єкта змінні беруться **за іменами ключів**, порядок неважливий:
+
+```js
+const response = { status: 200, body: { id: 42 }, headers: {} };
+
+const { status, body } = response;
+status // 200
+```
+
+Перейменування, значення за замовчуванням і вкладеність:
+
+```js
+const { status: code } = response;         // змінна code, а не status
+const { retries = 3 } = {};                // 3 — значення за замовчуванням (default)
+const { body: { id } } = response;         // id === 42 (змінної body при цьому немає!)
+const { timeout: ms = 5000 } = {};         // перейменування й default разом
+```
+
+Значення за замовчуванням спрацьовує лише для `undefined`, не для `null`:
+
+```js
+const { retries = 3 } = { retries: null }; // retries === null
+```
+
+### Rest: «усе інше»
+
+Три крапки ліворуч від `=` збирають решту в новий масив чи об'єкт:
+
+```js
+const [head, ...tail] = ['id', 'name', 'email'];
+head // 'id'
+tail // ['name', 'email']
+
+const { password, ...safeUser } = { id: 1, login: 'ann', password: 'secret' };
+safeUser // { id: 1, login: 'ann' } — без пароля, оригінал не змінився
+```
+
+Rest-параметр функції (rest parameters) збирає довільну кількість аргументів у масив:
+
+```js
+function logStep(name, ...details) {
+  console.log(`[${name}]`, details.join(' | '));
+}
+logStep('login', 'ann', 'chromium'); // details === ['ann', 'chromium']
+```
+
+### Spread: «розгорни тут»
+
+Ті самі три крапки праворуч, у місці, де очікуються значення, — розгортають масив чи об'єкт:
+
+```js
+const smoke = ['login', 'search'];
+const all = [...smoke, 'checkout'];   // ['login', 'search', 'checkout']
+const copy = [...smoke];              // новий масив
+Math.max(...[3, 7, 5]);               // 7
+
+const headers = { Accept: 'application/json' };
+const withAuth = { ...headers, Authorization: 'Bearer abc' };
+```
+
+Правило розрізнення: **rest — збирає** (ліворуч від `=` або в параметрах), **spread — розгортає**
+(у літералі масиву чи об'єкта, у виклику функції).
+
+### Порядок має значення: `{ ...defaults, ...overrides }`
+
+Якщо ключ повторюється, перемагає той, що **пізніше**:
+
+```js
+const defaults = { browser: 'chromium', retries: 0, headless: true };
+const overrides = { retries: 2 };
+
+const config = { ...defaults, ...overrides }; // { browser: 'chromium', retries: 2, headless: true }
+const broken = { ...overrides, ...defaults }; // retries: 0 — перевизначення загубилося
+```
+
+Це і є основа будь-якої фабрики тестових даних і будь-якого конфігу.
+
+### Spread копіює лише верхній рівень
+
+```js
+const original = { name: 'Ann', address: { city: 'Київ' } };
+const copy = { ...original };
+
+copy === original                  // false — новий об'єкт
+copy.address === original.address  // true  — вкладений об'єкт спільний!
+```
+
+Щоб вкладений об'єкт теж був новим, розгорни і його:
+
+```js
+const safeCopy = { ...original, address: { ...original.address } };
+```
+
+Для глибоких структур — `structuredClone` з уроку 09.
+
+### Незмінне оновлення (immutable update)
+
+Замість того, щоб змінювати дані «на місці», створюють нову версію з потрібною зміною.
+Так працюють React, Redux і більшість хороших тестових утиліт:
+
+```js
+const cart = { id: 'c1', items: [{ id: 'p1', qty: 1 }, { id: 'p2', qty: 3 }] };
+
+const updated = {
+  ...cart,
+  items: cart.items.map((item) => (item.id === 'p1' ? { ...item, qty: 5 } : item)),
+};
+// cart не змінився, updated — нова версія
+```
+
+### Об'єкт опцій у параметрах
+
+Коли в функції багато необов'язкових параметрів, їх передають одним об'єктом і одразу
+деструктуризують із значеннями за замовчуванням:
+
+```js
+function login(user, { timeout = 5000, rememberMe = false } = {}) {
+  // ...
+}
+
+login(user);                        // усі опції за замовчуванням
+login(user, { rememberMe: true });  // змінили лише одну
+```
+
+Порядок опцій не важливий, а виклик читається без документації. Так влаштовані
+`page.goto(url, { timeout })`, `locator.click({ force: true })` і майже весь API Playwright.
+`= {}` наприкінці потрібне, щоб виклик без другого аргументу не впав.
+
+## Типові помилки
+
+1. **Спільний вкладений об'єкт після spread.** `{ ...defaults }` не копіює `defaults.address`.
+   Тест змінює свого юзера — і ламає дані іншим тестам.
+2. **Неправильний порядок spread.** `{ ...overrides, ...defaults }` — перевизначення мовчки
+   загублюються.
+3. **Деструктуризація `undefined`.** `const { a } = undefined` — `TypeError`. У параметрах функції
+   додавай `= {}`: `function f({ a } = {})`.
+4. **«Default спрацює для `null`».** Ні — лише для `undefined`.
+5. **`delete` замість rest.** `delete user.password` змінює оригінал. `const { password, ...rest } = user`
+   — ні.
+6. **Плутанина у вкладеній деструктуризації.** `const { body: { id } } = res` створює лише `id`;
+   змінної `body` немає.
+
+## Документація
+
+Прочитай саме в такому порядку:
+
+1. [javascript.info: Деструктуризаційне присвоєння](https://uk.javascript.info/destructuring-assignment) — українською.
+2. [javascript.info: Залишкові параметри і синтаксис поширення](https://uk.javascript.info/rest-parameters-spread)
+3. [javascript.info: Копіювання об'єктів та посилання](https://uk.javascript.info/object-copy) — повтори розділ про поверхневе копіювання.
+4. Довідник для перевірки деталей: [MDN: Destructuring](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Destructuring),
+   [MDN: Spread syntax](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Spread_syntax),
+   [MDN: Rest parameters](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/rest_parameters)
+
+## Практика
+
+Ката: `exercises/01-javascript/10-destructuring-spread`. Маленька фабрика тестових даних і утиліти
+навколо неї: створення користувача з перевизначеннями, прибирання пароля, розбір таблиці на заголовок
+і рядки, назва тесту з об'єкта опцій і незмінне оновлення кошика.
+
+1. Відкрий у VS Code файл `exercises/01-javascript/10-destructuring-spread/exercise.js` і прочитай `TODO`.
+2. У терміналі в корені репозиторію запусти перевірку:
+
+   ```sh
+   npm run check -- exercises/01-javascript/10-destructuring-spread
+   ```
+
+3. Читай повідомлення червоних тестів — це підказки. Пиши код, доки все не стане зеленим.
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+Пиши `createUser` так, ніби вона вже лежить у справжньому фреймворку: її викликатимуть сотні тестів,
+і жоден не повинен зіпсувати дані іншому. Саме це перевіряють тести кати.
+
+## Самоперевірка
+
+Відповідай уголос, потім розгорни відповідь.
+
+<details>
+<summary>Чим rest відрізняється від spread, якщо обидва пишуться як `...`?</summary>
+
+Rest **збирає** решту значень у масив чи об'єкт — ліворуч від `=` або в параметрах функції.
+Spread **розгортає** масив чи об'єкт на окремі значення — у літералі `[...]`, `{...}` або у виклику функції.
+</details>
+
+<details>
+<summary>Що буде в `{ ...{ a: 1, b: 2 }, ...{ b: 3 } }`?</summary>
+
+`{ a: 1, b: 3 }`. При повторенні ключа перемагає значення, що стоїть пізніше.
+</details>
+
+<details>
+<summary>Чому `{ ...user }` не захищає `user.address` від змін?</summary>
+
+Spread робить поверхневу копію: новий лише верхній об'єкт, а у властивості `address` лежить те саме
+посилання. Треба окремо скопіювати вкладений об'єкт або використати `structuredClone`.
+</details>
+
+<details>
+<summary>Як отримати об'єкт користувача без поля `password`, не змінюючи оригінал?</summary>
+
+`const { password, ...safeUser } = user;` — у `safeUser` усі поля, крім пароля.
+</details>
+
+<details>
+<summary>Навіщо `= {}` у `function f({ timeout = 5000 } = {})`?</summary>
+
+Щоб виклик `f()` без аргументу не впав: без `= {}` JavaScript спробує деструктуризувати `undefined`
+і кине `TypeError`.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Що таке деструктуризація? Наведіть приклад для масиву й для об'єкта.
+- Яка різниця між rest і spread?
+- Як зробити копію об'єкта? Чи буде вона глибокою?
+- Як об'єднати два об'єкти, і що станеться з однаковими ключами?
+- Як поміняти місцями значення двох змінних без третьої?
+- Навіщо передавати параметри функції одним об'єктом опцій?
+</TabItem>
+<TabItem label="English">
+- What is destructuring? Give an example for an array and for an object.
+- What is the difference between rest and spread?
+- How do you copy an object? Will the copy be deep?
+- How do you merge two objects, and what happens to duplicate keys?
+- How do you swap the values of two variables without a third one?
+- Why pass function parameters as a single options object?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="01-javascript" lesson="10-destructuring-spread" />

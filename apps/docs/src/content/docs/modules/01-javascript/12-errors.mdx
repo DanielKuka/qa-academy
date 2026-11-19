@@ -1,0 +1,301 @@
+---
+title: "Помилки: try/catch і throw"
+description: Типи помилок, як читати stack trace, try/catch/finally, throw new Error, cause, повторне кидання і чому «проковтнута» помилка ховає баг.
+sidebar:
+  order: 12
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Ось тест, який ніколи не падає:
+
+```js
+try {
+  const order = createOrder({ items: [] });
+  checkTotal(order, 0);
+} catch (error) {
+  console.log('щось пішло не так'); // і... тест зелений
+}
+```
+
+`catch` перехопив помилку і нікому про неї не сказав. Баг є, звіт зелений, реліз іде в продакшн.
+Це «проковтнута» помилка (swallowed error) — один із найнебезпечніших патернів у тестовому коді.
+
+А тепер секрет: **будь-яка перевірка в тесті — це просто `throw`**. Коли `expect(a).toBe(b)` не
+збігається, він кидає помилку, і тест-раннер позначає тест червоним. Зрозумієш помилки — зрозумієш,
+як працюють тести зсередини. А вміння за 10 секунд прочитати stack trace і знайти рядок, де впав тест, —
+це те, що відрізняє автоматизатора, який розбирає падіння сам.
+
+## Концепція
+
+### Об'єкт помилки
+
+Помилка в JavaScript — це об'єкт із трьома головними властивостями:
+
+```js
+const error = new Error('Ціна має бути додатною');
+error.name;    // 'Error'
+error.message; // 'Ціна має бути додатною'
+error.stack;   // рядок: де помилку створили (stack trace)
+```
+
+### Вбудовані типи помилок
+
+| Тип | Коли виникає | Приклад |
+|---|---|---|
+| `TypeError` | операція з неправильним типом значення | `undefined.name`, `null()` |
+| `ReferenceError` | звернення до неоголошеної змінної | `console.log(usr)` (одруківка) |
+| `SyntaxError` | код або JSON не парситься | `JSON.parse('{bad}')` |
+| `RangeError` | значення поза допустимим діапазоном | `new Array(-1)`, `(1).toFixed(200)` |
+
+Найчастіша в тестах — `TypeError: Cannot read properties of undefined (reading 'id')`. Вона майже
+завжди означає: «API повернув не те, що ти очікував, і ти звернувся до поля відсутнього об'єкта».
+
+### Як читати stack trace
+
+Тест упав і показав таке:
+
+```
+TypeError: Cannot read properties of undefined (reading 'price')
+    at getTotal (src/cart.js:12:24)
+    at checkout (src/checkout.js:30:17)
+    at tests/checkout.test.js:8:5
+```
+
+Читай **згори вниз**:
+
+1. **Перший рядок** — тип і повідомлення. Що сталося: хтось читав `.price` у `undefined`.
+2. **Перший рядок `at`** — де саме: функція `getTotal`, файл `src/cart.js`, рядок 12, колонка 24.
+3. **Далі вниз** — хто кого викликав: тест → `checkout` → `getTotal`.
+
+Шукай найвищий рядок, що вказує на **твій** код, а не на `node_modules`. У VS Code по шляху
+`src/cart.js:12:24` можна клікнути з Ctrl/Cmd — і ти одразу на місці.
+
+### `try`, `catch`, `finally`
+
+```js
+try {
+  const data = JSON.parse(responseText); // може кинути SyntaxError
+  console.log(data.id);
+} catch (error) {
+  console.log(error.name, error.message); // виконується, лише якщо в try була помилка
+} finally {
+  console.log('виконається завжди');      // і після успіху, і після помилки
+}
+```
+
+`finally` — для прибирання (cleanup): закрити з'єднання, видалити тестового користувача, вийти з
+акаунта. Воно спрацює, навіть якщо в `try` був `return` або помилка.
+
+### `throw`: кинути свою помилку
+
+```js
+function setQuantity(qty) {
+  if (typeof qty !== 'number') {
+    throw new TypeError(`Кількість має бути числом, отримано ${typeof qty}`);
+  }
+  if (qty < 1) {
+    throw new RangeError(`Кількість має бути від 1, отримано ${qty}`);
+  }
+  // ...
+}
+```
+
+`throw` миттєво зупиняє функцію і передає помилку вгору — до найближчого `catch`. Немає `catch` —
+програма (або тест) падає.
+
+**Завжди кидай `Error` (або його підтип), а не рядок.** `throw 'щось не так'` не має `stack`, тож у
+звіті ти не побачиш, звідки прилетіла помилка.
+
+### Повторне кидання (rethrow) і `cause`
+
+Часто помилку треба зловити, щоб **додати контекст**, і кинути далі. Оригінальну помилку передають
+через опцію `cause` — так не губиться первинна причина:
+
+```js
+function loadFixture(name, text) {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(`Фікстура "${name}" — невалідний JSON`, { cause: error });
+  }
+}
+```
+
+Тепер у звіті видно і «що ми робили» (`Фікстура "users"…`), і «що саме зламалося»
+(`error.cause` — оригінальний `SyntaxError`).
+
+Якщо ти ловиш лише певний тип помилки, решту — кидай далі без змін:
+
+```js
+try {
+  riskyStep();
+} catch (error) {
+  if (error instanceof SyntaxError) {
+    return null;     // цей випадок ми очікуємо й обробляємо
+  }
+  throw error;       // все інше — не наша справа, хай летить далі
+}
+```
+
+`instanceof` перевіряє, чи помилка певного типу (або його нащадок).
+
+### Власний тип помилки
+
+Для фреймворку зручно мати свої типи помилок, щоб розрізняти їх через `instanceof`. Синтаксис класів
+ми розберемо в уроці 14 — поки просто візьми цей шаблон:
+
+```js
+class ApiError extends Error {
+  constructor(message, status) {
+    super(message);          // передаємо повідомлення в Error
+    this.name = 'ApiError';  // щоб у звіті було видно тип
+    this.status = status;    // власне поле
+  }
+}
+
+throw new ApiError('Сервер повернув 500', 500);
+```
+
+### Перевірка в тесті — це `throw`
+
+Ось уся «магія» `expect` у спрощеному вигляді:
+
+```js
+function assertEqual(actual, expected) {
+  if (actual !== expected) {
+    throw new Error(`Expected ${expected}, received ${actual}`);
+  }
+}
+```
+
+Тест-раннер викликає твій тест у `try/catch`. Нічого не кинуто — тест зелений. Кинуто — червоний, а
+`message` і `stack` потрапляють у звіт. Саме тому порожній `catch` у тесті вимикає всі перевірки
+всередині `try`.
+
+<Aside type="tip" title="Що з цього для автотестів">
+У Playwright, щоб перевірити, що код **має** кинути помилку, не пишуть `try/catch`, а використовують
+`expect(() => fn()).toThrow(...)` (для async-коду — `await expect(promise).rejects.toThrow()`, про це
+в модулі 02).
+</Aside>
+
+## Типові помилки
+
+1. **Порожній `catch` у тесті.** Помилку проковтнуто — тест зелений, баг пропущено. Якщо не знаєш, що
+   робити з помилкою, — не лови її.
+2. **`throw 'рядок'`.** Немає `stack`, немає `name`, `instanceof Error` дає `false`. Завжди
+   `throw new Error(...)`.
+3. **Втрата первинної помилки.** `catch (e) { throw new Error('Не вдалося') }` — і ніхто не дізнається
+   чому. Передавай `{ cause: e }` або хоча б `e.message`.
+4. **Повідомлення без контексту.** `'Invalid value'` нічого не каже. Пиши, **що** очікувалося і **що**
+   прийшло: `` `Expected status 200, received ${status}` ``.
+5. **Прибирання не в `finally`.** Якщо видалення тестового користувача стоїть після перевірки, то при
+   падінні перевірки воно не виконається — і база засмічується.
+6. **`Number('')` вважають помилкою.** Ні: `Number('')` і `Number('  ')` дають `0`. Порожній рядок
+   перевіряй окремо, інакше «порожня ціна» стане нулем.
+
+## Документація
+
+Прочитай саме в такому порядку:
+
+1. [javascript.info: Обробка помилок, «try...catch»](https://uk.javascript.info/try-catch)
+2. [javascript.info: Користувацькі помилки, розширення Error](https://uk.javascript.info/custom-errors) —
+   повернись до неї ще раз після уроку 14 про класи.
+3. Довідник: [MDN: Error](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error),
+   [MDN: try...catch](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/try...catch),
+   [MDN: Error cause](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/cause),
+   [MDN: Error types](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error#error_types)
+
+## Практика
+
+Ката: `exercises/01-javascript/12-errors`. П'ять маленьких утиліт для тестового фреймворку: власна
+перевірка `assertEqual`, безпечний розбір JSON, парсер ціни з UI, гарантоване прибирання через
+`finally` і завантаження фікстури з контекстом помилки через `cause`.
+
+1. Відкрий у VS Code файл `exercises/01-javascript/12-errors/exercise.js` і прочитай `TODO`.
+2. У терміналі в корені репозиторію запусти перевірку:
+
+   ```sh
+   npm run check -- exercises/01-javascript/12-errors
+   ```
+
+3. Читай повідомлення червоних тестів — це підказки. Пиши код, доки все не стане зеленим.
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+## Самоперевірка
+
+Відповідай уголос, потім розгорни відповідь.
+
+<details>
+<summary>Які вбудовані типи помилок ти знаєш і коли вони виникають?</summary>
+
+`TypeError` — операція з неправильним типом (читання поля в `undefined`). `ReferenceError` — неоголошена
+змінна. `SyntaxError` — код або JSON не парситься. `RangeError` — значення поза допустимим діапазоном.
+</details>
+
+<details>
+<summary>Тест упав зі stack trace. З чого почнеш?</summary>
+
+Прочитаю перший рядок (тип і повідомлення), потім знайду найвищий рядок `at`, що вказує на мій код,
+а не на `node_modules`, і відкрию цей файл і рядок.
+</details>
+
+<details>
+<summary>Коли виконується `finally`?</summary>
+
+Завжди: після успішного `try`, після `catch`, навіть якщо в `try` був `return` або помилка не була
+перехоплена.
+</details>
+
+<details>
+<summary>Чому не можна писати `throw 'текст'`?</summary>
+
+Рядок не має `stack`, `name` і не проходить `instanceof Error`, тож у звіті не видно, де виникла
+проблема, а код, що розрізняє помилки за типом, її пропустить.
+</details>
+
+<details>
+<summary>Навіщо потрібен `cause`?</summary>
+
+Щоб, додаючи контекст («не вдалося завантажити фікстуру»), не втратити первинну помилку. Вона лишається
+доступною в `error.cause`.
+</details>
+
+<details>
+<summary>Як пов'язані `expect` і `throw`?</summary>
+
+`expect` при невідповідності кидає помилку. Тест-раннер ловить її і позначає тест як упалий. Тому
+перевірка всередині `try` з порожнім `catch` ніколи не зробить тест червоним.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Як працює `try/catch/finally`? Коли виконується `finally`?
+- Які типи помилок є в JavaScript? Чим `TypeError` відрізняється від `ReferenceError`?
+- Чому краще кидати `new Error()`, а не рядок?
+- Як прочитати stack trace упалого тесту?
+- Що таке «проковтнута» помилка і чим вона небезпечна в тестах?
+- Як створити власний тип помилки?
+- Як зберегти первинну помилку, додаючи до неї контекст?
+</TabItem>
+<TabItem label="English">
+- How does `try/catch/finally` work? When does `finally` run?
+- What error types exist in JavaScript? How does `TypeError` differ from `ReferenceError`?
+- Why is it better to throw `new Error()` rather than a string?
+- How do you read the stack trace of a failed test?
+- What is a swallowed error, and why is it dangerous in tests?
+- How do you create a custom error type?
+- How do you keep the original error when adding context to it?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="01-javascript" lesson="12-errors" />

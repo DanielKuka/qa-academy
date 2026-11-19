@@ -1,0 +1,351 @@
+---
+title: Функції
+description: Оголошення, функціональний вираз і стрілкова функція, параметри за замовчуванням, return, чисті функції та колбеки.
+sidebar:
+  order: 5
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Подивись на типовий «перший автотест» без функцій:
+
+```js
+const user1 = { name: 'Ann', role: 'customer', email: 'ann@test.dev' };
+const user2 = { name: 'Bob', role: 'customer', email: 'bob@test.dev' };
+const admin = { name: 'Eve', role: 'admin', email: 'eve@test.dev' };
+// ...і ще 40 таких рядків у різних файлах
+```
+
+Завтра бекенд додає обов'язкове поле `country`. Тепер треба знайти й виправити кожен такий рядок —
+і обов'язково якийсь пропустиш. З функцією зміна робиться в **одному** місці:
+
+```js
+function buildUser(name, role = 'customer') {
+  return { name: name, role: role, country: 'UA' };
+}
+```
+
+Функції — це головний інструмент автоматизатора: генератори тестових даних, кроки логіну, перевірки
+відповідей API, утиліти очікування. Увесь Playwright побудований на функціях, які ти передаєш у
+`test('назва', async ({ page }) => { ... })`. А ще функції — джерело підступних багів у самих тестах:
+функція, яка «нічого не повертає», робить перевірку завжди зеленою.
+
+## Концепція
+
+### Три способи оголосити функцію
+
+```js
+// 1. Оголошення функції (function declaration)
+function add(a, b) {
+  return a + b;
+}
+
+// 2. Функціональний вираз (function expression) — функція як значення змінної
+const multiply = function (a, b) {
+  return a * b;
+};
+
+// 3. Стрілкова функція (arrow function) — короткий запис виразу
+const subtract = (a, b) => a - b;
+```
+
+Усі три викликаються однаково: `add(2, 3)`, `multiply(2, 3)`, `subtract(5, 2)`.
+У тестовому коді найчастіше бачиш оголошення для «великих» хелперів і стрілкові функції для
+коротких колбеків.
+
+### Параметри і аргументи
+
+**Параметри** (parameters) — імена в оголошенні функції. **Аргументи** (arguments) — значення,
+які ти передаєш під час виклику.
+
+```js
+function login(email, password) { /* email і password — параметри */ }
+login('qa@test.dev', 'secret');   // 'qa@test.dev' і 'secret' — аргументи
+```
+
+JavaScript не перевіряє кількість аргументів. Не передав — параметр дорівнює `undefined`.
+Передав зайві — вони просто ігноруються.
+
+### Параметри за замовчуванням
+
+```js
+function buildUser(name, role = 'customer') {
+  return { name: name, role: role };
+}
+
+buildUser('Ann');              // { name: 'Ann', role: 'customer' }
+buildUser('Eve', 'admin');     // { name: 'Eve', role: 'admin' }
+buildUser('Bob', undefined);   // role = 'customer' — undefined вмикає значення за замовчуванням
+buildUser('Kim', null);        // role = null — а null НЕ вмикає!
+```
+
+Значення за замовчуванням (default parameter) спрацьовує **лише для `undefined`**. Це та сама логіка,
+що й в операторі `??` з уроку 02, тільки ще суворіша: `null` тут проходить як є.
+
+### `return`
+
+`return` робить дві речі: повертає значення і **одразу** завершує функцію.
+
+```js
+function getStatusText(code) {
+  if (code === 200) {
+    return 'OK';        // далі код не виконується
+  }
+  return 'Помилка';
+}
+```
+
+Функція без `return` (або з порожнім `return;`) повертає `undefined`:
+
+```js
+function sum(a, b) {
+  a + b;               // обчислили і викинули
+}
+sum(2, 3);             // undefined
+```
+
+### Стрілкові функції: з дужками і без
+
+```js
+const double = (n) => n * 2;          // без фігурних дужок — результат повертається сам
+const triple = (n) => { n * 3; };     // з дужками — це тіло функції, потрібен return!
+const triple2 = (n) => { return n * 3; };
+
+double(5);    // 10
+triple(5);    // undefined ← баг
+triple2(5);   // 15
+```
+
+Короткий запис без `{}` називають **неявним поверненням** (implicit return). Щойно з'являються
+фігурні дужки — `return` знову обов'язковий.
+
+### Чисті функції і побічні ефекти
+
+**Чиста функція** (pure function):
+
+1. для однакових аргументів завжди повертає однаковий результат;
+2. нічого не змінює поза собою — тобто не має **побічних ефектів** (side effects).
+
+```js
+// Чиста: залежить лише від аргументів
+function priceWithVat(price) {
+  return price * 1.2;
+}
+
+// Нечиста: змінює зовнішню змінну
+let createdUsers = 0;
+function createUser(name) {
+  createdUsers = createdUsers + 1;   // побічний ефект
+  return { name: name };
+}
+```
+
+Побічні ефекти бувають і потрібні: запис у базу, HTTP-запит, клік у браузері — це і є суть тесту.
+Але **хелпери для даних і перевірок мають бути чистими**. Чиста функція поводиться однаково в
+кожному тесті, незалежно від порядку запуску, а тести, які ділять спільний змінюваний стан, —
+головне джерело flaky-тестів (нестабільних тестів), особливо при паралельному запуску.
+
+### Функція — це значення. Колбеки
+
+Функцію можна покласти в змінну, передати в іншу функцію як аргумент і викликати там.
+Функцію, яку передають «щоб її викликали пізніше», називають **колбеком** (callback).
+А функцію, яка приймає або повертає іншу функцію, — **функцією вищого порядку** (higher-order function).
+
+```js
+function runTwice(action) {
+  action();
+  action();
+}
+
+runTwice(() => console.log('Клік'));   // Клік, Клік
+```
+
+Зверни увагу: передаємо саму функцію, **без дужок**. `runTwice(sayHi())` спершу викличе `sayHi` і
+передасть її результат — зазвичай `undefined`.
+
+Функція може й **повертати** нову функцію. Наприклад, з перевірки «статус — failed» зробити
+перевірку «статус — НЕ failed», не переписуючи її:
+
+```js
+function makeStatusCheck(expected) {
+  return (status) => status === expected;   // повертаємо функцію, а не результат
+}
+
+const isFailed = makeStatusCheck('failed');   // isFailed — це функція
+isFailed('failed');    // true
+isFailed('passed');    // false
+```
+
+Нова функція «пам'ятає» `expected`, з яким її створили. Як саме це працює, розберемо в уроці 11
+(замикання), а поки достатньо самого прийому.
+
+Ти бачитимеш колбеки всюди:
+
+```js
+// Методи масивів (урок 08)
+const failed = results.filter((result) => result.status === 'failed');
+
+// Playwright: сам тест — це колбек, який фреймворк викличе пізніше
+test('кошик порожній', async ({ page }) => {
+  // ...
+});
+```
+
+### Підняття (hoisting)
+
+Оголошення функції (`function name() {}`) JavaScript «піднімає» (hoisting) — її можна викликати
+**вище** за місце оголошення:
+
+```js
+greet();                       // працює
+
+function greet() {
+  console.log('Привіт');
+}
+```
+
+Функціональні вирази і стрілкові функції живуть у `const`, тому до рядка оголошення їх викликати
+не можна:
+
+```js
+hello();                       // ReferenceError: Cannot access 'hello' before initialization
+const hello = () => console.log('Привіт');
+```
+
+<Aside type="tip" title="Що з цього для автотестів">
+У Playwright ти постійно передаватимеш стрілкові функції: тест, хук `beforeEach`, крок `test.step`.
+Тож синтаксис `() => { ... }` і правило «з дужками потрібен `return`» мають стати автоматичними.
+</Aside>
+
+## Типові помилки
+
+1. **Забутий `return`** — функція рахує результат і викидає його. Тест на кшталт
+   `expect(isValid(email))` отримує `undefined` і поводиться не так, як ти думаєш.
+2. **Стрілкова функція з `{}` без `return`** — `(a, b) => { a * b; }` повертає `undefined`. Або прибери
+   дужки, або допиши `return`.
+3. **`console.log` замість `return`** — у консолі видно правильне значення, але функція повертає
+   `undefined`. Вивести і повернути — різні речі.
+4. **Виклик замість передачі** — `runTwice(click())` передає результат виклику, а не функцію.
+   Правильно: `runTwice(click)` або `runTwice(() => click())`.
+5. **Очікування, що `null` увімкне значення за замовчуванням** — ні, лише `undefined`.
+6. **Хелпер зі схованим станом** — функція змінює зовнішню змінну, і результат тесту залежить від того,
+   які тести запускалися раніше. Повертай нові значення замість зміни зовнішніх.
+
+## Документація
+
+Прочитай саме в такому порядку:
+
+1. [javascript.info: Функції](https://uk.javascript.info/function-basics) — українською.
+2. [javascript.info: Функціональні вирази](https://uk.javascript.info/function-expressions) — там же
+   про колбеки і різницю з оголошенням.
+3. [javascript.info: Стрілкові функції, основи](https://uk.javascript.info/arrow-functions-basics)
+4. Довідник для перевірки деталей: [MDN: Functions](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Functions),
+   [MDN: Arrow function expressions](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Arrow_functions),
+   [MDN: Default parameters](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Default_parameters),
+   [MDN: Hoisting](https://developer.mozilla.org/en-US/docs/Glossary/Hoisting)
+
+## Практика
+
+Ката: `exercises/01-javascript/05-functions`. П'ять маленьких хелперів для тестового фреймворку:
+генератор користувача, назва тест-кейсу, пошук бага в стрілковій функції, підрахунок упалих тестів
+через колбек і функція, яка повертає функцію-перевірку з протилежним результатом.
+
+1. Відкрий у VS Code файл `exercises/01-javascript/05-functions/exercise.js` і прочитай `TODO`.
+2. У терміналі в корені репозиторію запусти перевірку:
+
+   ```sh
+   npm run check -- exercises/01-javascript/05-functions
+   ```
+
+3. Читай повідомлення червоних тестів — це підказки. Пиши код, доки все не стане зеленим.
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+У завданні 1 функція повертає об'єкт. Об'єкти детально розберемо в уроці 09, а поки достатньо
+такого шаблону:
+
+```js
+function buildProduct(title, price) {
+  return { title: title, price: price };   // ключ: значення, через кому
+}
+```
+
+## Самоперевірка
+
+Відповідай уголос, потім розгорни відповідь.
+
+<details>
+<summary>Що поверне функція, в якій немає `return`?</summary>
+
+`undefined`. Те саме — для порожнього `return;` і для стрілкової функції з фігурними дужками без
+`return` усередині.
+</details>
+
+<details>
+<summary>Коли спрацьовує значення параметра за замовчуванням?</summary>
+
+Коли аргумент не передали або передали явно `undefined`. Для `null`, `0` чи `''` значення за
+замовчуванням **не** спрацьовує.
+</details>
+
+<details>
+<summary>Чим оголошення функції відрізняється від функціонального виразу?</summary>
+
+Оголошення піднімається (hoisting) — його можна викликати до рядка, де воно написане. Функціональний
+вираз (і стрілкова функція) у `const` доступний лише після рядка оголошення.
+</details>
+
+<details>
+<summary>Що таке чиста функція і чому тестові хелпери мають бути чистими?</summary>
+
+Чиста функція для тих самих аргументів завжди повертає той самий результат і не змінює нічого
+зовні. Такі хелпери дають однаковий результат у будь-якому тесті й за будь-якого порядку запуску —
+отже, тести стабільні й незалежні.
+</details>
+
+<details>
+<summary>Що таке функція вищого порядку? Наведи два приклади.</summary>
+
+Функція, яка приймає іншу функцію як аргумент (як `countMatching(items, predicate)` чи `filter`) або
+повертає нову функцію (як `makeStatusCheck('failed')`).
+</details>
+
+<details>
+<summary>Яка різниця між `runTwice(click)` і `runTwice(click())`?</summary>
+
+У першому випадку передаємо саму функцію — `runTwice` викличе її сама. У другому `click` викликається
+одразу, а в `runTwice` потрапляє її результат (часто `undefined`).
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Які є способи оголосити функцію в JavaScript? Чим вони відрізняються?
+- Що таке hoisting? Як він стосується функцій?
+- Чим стрілкова функція відрізняється від звичайної? (Про `this` — в уроці 14; зараз достатньо
+  синтаксису й неявного повернення.)
+- Що поверне функція без `return`?
+- Що таке чиста функція? Що таке побічний ефект?
+- Що таке колбек? Наведіть приклад з тестового фреймворку.
+- Що таке функція вищого порядку?
+</TabItem>
+<TabItem label="English">
+- What are the ways to define a function in JavaScript? How do they differ?
+- What is hoisting? How does it apply to functions?
+- How does an arrow function differ from a regular function? (`this` is covered in lesson 14; for
+  now, syntax and implicit return are enough.)
+- What does a function without `return` return?
+- What is a pure function? What is a side effect?
+- What is a callback? Give an example from a test framework.
+- What is a higher-order function?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="01-javascript" lesson="05-functions" />
