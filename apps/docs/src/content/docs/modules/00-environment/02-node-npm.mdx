@@ -1,0 +1,228 @@
+---
+title: Node.js і npm
+description: Що таке Node.js, package.json, скрипти, dependencies проти devDependencies, semver, lock-файл і npm ci.
+sidebar:
+  order: 2
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Ти клонуєш репозиторій з автотестами, запускаєш `npx playwright test` — і отримуєш
+`Cannot find module '@playwright/test'`. Колега каже: «У мене все працює». Через тиждень у CI тести
+раптово падають, хоча код ніхто не чіпав: оновилася бібліотека.
+
+Обидві проблеми — про `package.json` і npm. Playwright, Vitest, ESLint, генератори тестових даних —
+усе це npm-пакети. Хто розуміє, як вони встановлюються і фіксуються, той швидко лагодить
+«у мене працює, а в CI — ні».
+
+## Концепція
+
+### Node.js
+
+**Node.js** — середовище, яке виконує JavaScript поза браузером: на твоєму комп'ютері чи в CI.
+Саме в Node.js працюють тест-раннери, а Playwright з Node.js керує браузером.
+
+```sh
+node -v               # яка версія встановлена (потрібна 22+)
+node script.js        # виконати файл
+node                  # REPL: інтерактивна консоль, вихід — Ctrl+D або .exit
+```
+
+<Aside type="tip" title="Кілька версій Node.js">
+Різні проєкти можуть вимагати різних версій. Менеджер версій — [nvm](https://github.com/nvm-sh/nvm)
+(macOS/Linux), [nvm-windows](https://github.com/coreybutler/nvm-windows) або
+[fnm](https://github.com/Schniz/fnm) (усі ОС) — перемикає їх однією командою. Файл `.nvmrc` у корені
+проєкту каже, яка версія потрібна.
+</Aside>
+
+### npm і `package.json`
+
+**npm** (Node Package Manager) встановлює пакети з реєстру [npmjs.com](https://www.npmjs.com/) і
+запускає скрипти проєкту. Паспорт проєкту — файл `package.json`:
+
+```json
+{
+  "name": "shop-tests",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "eslint .",
+    "report": "playwright show-report"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.13"
+  },
+  "devDependencies": {
+    "eslint": "^9.18.0"
+  }
+}
+```
+
+`npm init -y` створює мінімальний `package.json` у новій теці.
+
+### Скрипти
+
+Розділ `scripts` — це «ярлики» для команд проєкту. Замість того щоб пам'ятати довгу команду з
+прапорцями, всі в команді запускають однакове:
+
+```sh
+npm run lint        # виконає "eslint ."
+npm run report
+npm test            # для test і start слово run можна пропустити
+npm start
+```
+
+У скриптах доступні команди встановлених пакетів (з `node_modules/.bin`) без `npx`.
+
+### Модулі: поле `type`
+
+Сучасний JavaScript ділить код на модулі через `import`/`export` (ES-модулі). Історично Node.js
+використовував інший формат — CommonJS (`require`). Яким вважати `.js`-файл, Node.js визначає за
+полем `type` у `package.json`. Детально — у документації
+[Node.js: Modules: Packages](https://nodejs.org/api/packages.html#type) і в уроці модуля 01 про модулі.
+
+### `dependencies` проти `devDependencies`
+
+```sh
+npm install dayjs          # → dependencies: потрібне застосунку під час роботи
+npm install -D eslint      # → devDependencies: потрібне лише розробникам (-D = --save-dev)
+npm uninstall dayjs        # видалити пакет
+```
+
+Для тестового проєкту майже все — `devDependencies`: тест-раннер, лінтер, типи. Різниця важлива,
+коли застосунок збирається для продакшну: інструменти розробки туди не потрапляють.
+
+### Версії: semver і `^`
+
+Версія пакета — **semver**: `MAJOR.MINOR.PATCH`, напр. `1.65.1`.
+
+- `PATCH` (1.65.**2**) — виправлення багів;
+- `MINOR` (1.**66**.0) — нові можливості, сумісні зі старими;
+- `MAJOR` (**2**.0.0) — несумісні зміни, щось зламається.
+
+У `package.json` зазвичай записано **діапазон**:
+
+| Запис | Дозволяє | Приклад |
+|---|---|---|
+| `^1.65.1` | minor і patch | 1.65.1 … 1.99.9, але не 2.0.0 |
+| `~1.65.1` | лише patch | 1.65.1 … 1.65.9 |
+| `1.65.1` | рівно цю версію | — |
+| `>=22` | цю або новішу | так часто пишуть вимогу до Node.js у полі `engines` |
+
+`npm install пакет` за замовчуванням записує діапазон із `^`.
+
+### `package-lock.json`, `npm install` і `npm ci`
+
+Діапазон `^1.65.1` сьогодні дасть 1.65.1, а через місяць — 1.70.0. Щоб усі отримали **однакові**
+версії, npm записує точні встановлені версії всього дерева залежностей у `package-lock.json`.
+
+- `npm install` — встановлює і за потреби **оновлює** lock-файл. Для роботи на своєму комп'ютері.
+- `npm ci` — встановлює **строго** за lock-файлом, нічого в ньому не змінює і падає, якщо lock-файл
+  не узгоджується з `package.json`. Спершу видаляє `node_modules/`. Це команда для CI.
+
+`package-lock.json` **комітять**. Теку `node_modules/` — **ніколи**: вона величезна й відновлюється
+командою npm за секунди.
+
+### `npx`
+
+`npx` запускає команду пакета без глобального встановлення:
+
+```sh
+npx playwright test          # запустити тести Playwright з node_modules проєкту
+npx playwright --version
+```
+
+## Типові помилки
+
+1. **Закомітили `node_modules/`.** Репозиторій роздувається на сотні мегабайт. Лікування — `.gitignore`
+   (урок 04).
+2. **Не закомітили `package-lock.json`.** У CI встановлюються інші версії, ніж у тебе, — «у мене працює».
+3. **Тестові інструменти в `dependencies`.** Забули `-D`. Працює, але неакуратно, і на рев'ю це помітять.
+4. **Глобальне встановлення інструментів** (`npm install -g ...`). У кожного своя версія; в CI її немає.
+   Ставимо в проєкт і запускаємо через `npx` або `npm run`.
+5. **Команда з неправильної теки.** `npm install` у підтеці без `package.json` створить новий проєкт
+   «не там». Дивись `pwd`.
+6. **Стара версія Node.js.** Дивна синтаксична помилка в сучасному коді — перевір `node -v`.
+
+## Документація
+
+1. [Node.js: Introduction to Node.js](https://nodejs.org/en/learn/getting-started/introduction-to-nodejs)
+2. [npm Docs: About packages and modules](https://docs.npmjs.com/about-packages-and-modules)
+3. [npm Docs: package.json](https://docs.npmjs.com/cli/configuring-npm/package-json) — довідник полів:
+   `scripts`, `dependencies`, `devDependencies`, `engines`.
+4. [npm Docs: About semantic versioning](https://docs.npmjs.com/about-semantic-versioning) і
+   [semver calculator](https://semver.npmjs.com/) — перевір, які версії дає діапазон.
+5. [Node.js: Modules: Packages → "type"](https://nodejs.org/api/packages.html#type)
+6. [Node.js: Test runner](https://nodejs.org/api/test.html) — знадобиться в каті.
+
+## Практика
+
+Ката: `exercises/00-environment/02-node-npm`. У теці `my-project/` лежить маленький проєкт, якому
+бракує правильного `package.json`: потрібні тип модулів, скрипти `start` і `test`, залежність для
+розробки і вимога до версії Node.js.
+
+1. Прочитай завдання в `exercises/00-environment/02-node-npm/README.md`.
+2. Працюй у терміналі всередині `my-project/` і перевіряй руками: `npm start`, `npm test`.
+3. Запусти перевірку з кореня репозиторію:
+
+   ```sh
+   npm run check -- exercises/00-environment/02-node-npm
+   ```
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+## Самоперевірка
+
+<details>
+<summary>Чим `dependencies` відрізняються від `devDependencies`? Куди поставити Playwright?</summary>
+
+`dependencies` потрібні застосунку під час роботи, `devDependencies` — лише для розробки й тестів.
+Playwright — у `devDependencies` (`npm install -D @playwright/test`).
+</details>
+
+<details>
+<summary>Які версії дозволяє `^2.3.4`? А `~2.3.4`?</summary>
+
+`^2.3.4` — від 2.3.4 до будь-якої 2.x.x (але не 3.0.0). `~2.3.4` — лише 2.3.x.
+</details>
+
+<details>
+<summary>Навіщо `package-lock.json` і чи комітити його?</summary>
+
+Він фіксує точні версії всього дерева залежностей, щоб у всіх і в CI було однаково. Так, комітити.
+</details>
+
+<details>
+<summary>Чому `node_modules/` не комітять?</summary>
+
+Вона величезна, залежить від ОС і повністю відновлюється з `package.json` + `package-lock.json`.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Що таке Node.js і навіщо він автоматизатору?
+- Яка різниця між `dependencies` і `devDependencies`?
+- Що означають `^` і `~` у версіях пакетів?
+- Навіщо потрібен `package-lock.json`?
+- Чим `npm ci` відрізняється від `npm install`? Що використовують у CI?
+- Що таке `npx`?
+</TabItem>
+<TabItem label="English">
+- What is Node.js and why does a test automation engineer need it?
+- What is the difference between `dependencies` and `devDependencies`?
+- What do `^` and `~` mean in package versions?
+- What is `package-lock.json` for?
+- How does `npm ci` differ from `npm install`? Which one do you use in CI?
+- What is `npx`?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="00-environment" lesson="02-node-npm" />

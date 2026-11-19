@@ -20,9 +20,9 @@ const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 // Зберігаємо лише хеші — тест не видає відповідей.
 const questions = [
 	{
-		key: 'npmInstallFromLockfile',
-		hash: '9db3f780def6105eee3cc930de4d0982607760820fddaa3facdd3813ccb40628',
-		where: 'docs.npmjs.com → CLI Commands: шукай команду, призначену для CI та автоматизованих середовищ.',
+		key: 'npmOutdatedCommand',
+		hash: 'c6add126c9cbc06c5f041d509409de75cc9bc17b3b3b25e0ea8e2b224b04eea7',
+		where: 'docs.npmjs.com → CLI Commands: переглянь описи команд — шукай ту, що порівнює current, wanted і latest.',
 	},
 	{
 		key: 'tooManyRequestsStatus',

@@ -1,0 +1,182 @@
+---
+title: VS Code для автоматизатора
+description: Робоче місце в редакторі — вбудований термінал, розширення, форматування, навігація кодом і гарячі клавіші.
+sidebar:
+  order: 3
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Автоматизатор проводить у редакторі більшу частину дня: пише тести, шукає, де оголошено локатор,
+запускає один конкретний тест, дивиться, чому він упав. Різниця між «відкрив файл мишкою через три
+теки» і «`Ctrl+P`, три літери, Enter» — це десятки хвилин щодня.
+
+А ще редактор ловить помилки **до запуску**: підкреслює опечатку в імені змінної, підказує аргументи
+функції, форматує код однаково для всієї команди.
+
+[VS Code](https://code.visualstudio.com/) — стандарт індустрії для JavaScript/TypeScript і Playwright:
+безкоштовний, на Windows, macOS і Linux, з офіційним розширенням Playwright.
+
+## Концепція
+
+### Відкривай теку, а не файл
+
+**File → Open Folder** і обирай **корінь проєкту** (там, де `package.json`). Тоді VS Code бачить увесь
+проєкт: пошук, навігація, Git і розширення працюють правильно. Відкритий окремий файл — це просто
+блокнот.
+
+З термінала: `code .` відкриває поточну теку (на macOS спершу виконай
+**Command Palette → Shell Command: Install 'code' command in PATH**).
+
+### Command Palette — пульт керування
+
+`Ctrl+Shift+P` (macOS: `Cmd+Shift+P`) — пошук по **всіх** командах редактора. Не пам'ятаєш, де
+налаштування чи як щось увімкнути, — набери пару слів тут.
+
+### Вбудований термінал
+
+**Terminal → New Terminal** або ``Ctrl+` ``. Він одразу відкривається в корені проєкту.
+
+<Aside type="caution" title="Windows: зроби Git Bash терміналом за замовчуванням">
+Command Palette → **Terminal: Select Default Profile** → **Git Bash**. Тоді команди з уроку
+[Термінал](/modules/00-environment/01-terminal/) працюють так само, як на macOS і в CI.
+</Aside>
+
+### Розширення (extensions)
+
+Панель Extensions — `Ctrl+Shift+X`. Мінімальний набір для курсу:
+
+| Розширення | Навіщо |
+|---|---|
+| **Playwright Test for VSCode** (Microsoft) | запуск і налагодження тестів кліком, запис дій, підбір локаторів |
+| **ESLint** | підсвічує помилки й погані практики в коді |
+| **Prettier – Code formatter** | однакове форматування коду для всієї команди |
+| **EditorConfig for VS Code** | однакові відступи й кінці рядків на всіх ОС |
+| **Error Lens** (за бажанням) | показує текст помилки прямо в рядку |
+
+Не став десятки розширень «про запас»: кожне сповільнює редактор і додає шуму.
+
+### Налаштування, які варто ввімкнути
+
+Command Palette → **Preferences: Open User Settings (JSON)**:
+
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "files.autoSave": "onFocusChange",
+  "files.eol": "\n",
+  "editor.rulers": [120]
+}
+```
+
+- `formatOnSave` — форматування при збереженні: більше жодних суперечок про пробіли на рев'ю.
+- `files.eol: "\n"` — Unix-кінці рядків. Windows за замовчуванням ставить `\r\n` (CRLF), і bash-скрипти
+  з ними ламаються.
+
+Налаштування можна зберегти й **для проєкту** — у `.vscode/settings.json`. Тоді вони однакові
+в усієї команди.
+
+### Навігація кодом
+
+| Дія | Windows / Linux | macOS |
+|---|---|---|
+| Швидко відкрити файл за назвою | `Ctrl+P` | `Cmd+P` |
+| Пошук по всьому проєкту | `Ctrl+Shift+F` | `Cmd+Shift+F` |
+| Перейти до оголошення | `F12` або `Ctrl+клік` | `F12` або `Cmd+клік` |
+| Знайти всі використання | `Shift+F12` | `Shift+F12` |
+| Перейменувати символ скрізь | `F2` | `F2` |
+| Перейти до рядка | `Ctrl+G` | `Ctrl+G` |
+| Закоментувати рядок | `Ctrl+/` | `Cmd+/` |
+| Перемістити рядок вгору/вниз | `Alt+↑/↓` | `Option+↑/↓` |
+| Додати курсор на наступний збіг | `Ctrl+D` | `Cmd+D` |
+| Показати/сховати бічну панель | `Ctrl+B` | `Cmd+B` |
+
+Не вчи всі одразу. Візьми `Ctrl+P`, `Ctrl+Shift+F` і `F12` — і користуйся ними тиждень, доки руки не
+запам'ятають. Потім додай наступні.
+
+### Git у редакторі
+
+Панель Source Control (`Ctrl+Shift+G`) показує змінені файли й різницю (diff) між версіями. Зручно
+переглядати зміни перед комітом. Але спершу навчися Git у терміналі (урок 04) — так ти розумітимеш,
+що робить кожна кнопка.
+
+## Типові помилки
+
+1. **Відкрито файл або батьківську теку, а не корінь проєкту.** Розширення Playwright не бачить
+   конфіг, імпорти підкреслені червоним.
+2. **Термінал PowerShell на Windows.** Команди з курсу не працюють — перемкни профіль на Git Bash.
+3. **Немає форматування при збереженні.** Diff на рев'ю на 80% складається з пробілів і лапок.
+4. **CRLF у скриптах.** `bash: $'\r': command not found` — у правому нижньому куті VS Code перемкни
+   `CRLF` на `LF` і збережи файл.
+5. **Гора розширень.** Редактор гальмує, а два форматувальники сперечаються між собою.
+6. **Незбережені файли.** Тест «не бачить» твоїх змін, бо файл не збережено (крапка на вкладці).
+   Увімкни autosave.
+
+## Документація
+
+1. [VS Code: Getting Started](https://code.visualstudio.com/docs/getstarted/getting-started) — офіційний вступний тур.
+2. [VS Code: Integrated Terminal](https://code.visualstudio.com/docs/terminal/basics) — профілі терміналів.
+3. Шпаргалки гарячих клавіш (PDF): [Windows](https://code.visualstudio.com/shortcuts/keyboard-shortcuts-windows.pdf),
+   [macOS](https://code.visualstudio.com/shortcuts/keyboard-shortcuts-macos.pdf).
+4. [Playwright: Getting started — VS Code](https://playwright.dev/docs/getting-started-vscode) — повернемося до цього в модулі 06.
+
+## Практика
+
+Автоматичної кати тут немає: результат уроку — налаштований редактор. Пройди чекліст і чесно
+відміть кожен пункт:
+
+- [ ] Відкрив репозиторій курсу через **Open Folder** у корені (там, де `package.json`).
+- [ ] Вбудований термінал відкривається в корені проєкту; на Windows — це Git Bash.
+- [ ] Встановив Playwright Test for VSCode, ESLint, Prettier, EditorConfig.
+- [ ] Увімкнув `formatOnSave` і `files.eol: "\n"`; перевірив: зіпсував відступи у файлі → зберіг → виправилось.
+- [ ] Через `Ctrl+P` відкрив `exercises/00-environment/01-terminal/commands.sh`, не торкаючись мишки.
+- [ ] Через `Ctrl+Shift+F` знайшов у проєкті всі місця, де згадується `loadExercise`.
+- [ ] Через `F12` перейшов від `loadExercise` у `exercises/01-javascript/01-variables-types/exercise.test.js`
+      до місця, де цю функцію оголошено.
+- [ ] Запустив перевірку кати з вбудованого термінала: `npm run check -- exercises/00-environment/01-terminal`.
+
+## Самоперевірка
+
+<details>
+<summary>Чому проєкт треба відкривати як теку, а не окремі файли?</summary>
+
+Лише так VS Code бачить увесь проєкт: пошук, перехід до оголошень, Git, розширення (Playwright, ESLint)
+і налаштування проєкту з `.vscode/` працюють правильно.
+</details>
+
+<details>
+<summary>Навіщо форматування при збереженні, якщо можна просто писати акуратно?</summary>
+
+Воно робить стиль однаковим для всієї команди автоматично. Рев'ю зосереджується на логіці тестів, а не на
+пробілах, і в diff немає «шуму».
+</details>
+
+<details>
+<summary>Що таке CRLF і LF і чому це важливо для автоматизатора?</summary>
+
+Різні символи кінця рядка: Windows — `\r\n` (CRLF), Linux/macOS — `\n` (LF). CI зазвичай на Linux, і
+bash-скрипти з CRLF там ламаються. Тому в проєктах фіксують LF (`.editorconfig`, `.gitattributes`).
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Яким редактором/IDE ви користуєтесь і які розширення для автоматизації встановлюєте?
+- Як ви запускаєте й налагоджуєте один конкретний тест у редакторі?
+- Як у команді забезпечити однакове форматування коду?
+- Які гарячі клавіші ви використовуєте найчастіше?
+</TabItem>
+<TabItem label="English">
+- Which editor or IDE do you use, and which extensions do you install for test automation?
+- How do you run and debug a single test from your editor?
+- How do you keep code formatting consistent across a team?
+- Which keyboard shortcuts do you use most often?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="00-environment" lesson="03-vscode" />

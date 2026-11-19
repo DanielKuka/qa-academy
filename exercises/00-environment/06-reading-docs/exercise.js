@@ -8,10 +8,10 @@
 
 export const answers = {
 	// 1. npm (docs.npmjs.com → CLI Commands)
-	//    Якою командою в CI встановлюють залежності СТРОГО за package-lock.json,
-	//    так що вона падає, якщо lock-файл не узгоджується з package.json?
+	//    Якою командою дізнатися, які пакети проєкту застаріли: показати встановлену версію,
+	//    бажану (за діапазоном у package.json) і найновішу в реєстрі?
 	//    Формат: 'npm <команда>'
-	npmInstallFromLockfile: '',
+	npmOutdatedCommand: '',
 
 	// 2. MDN → HTTP response status codes
 	//    Який код статусу означає «Too Many Requests» (спрацював rate limit)?

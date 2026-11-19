@@ -1,0 +1,185 @@
+---
+title: Як читати документацію і шукати відповіді
+description: Види документації, як читати повідомлення про помилку і stack trace, стратегія пошуку, надійні джерела, AI як помічник.
+sidebar:
+  order: 6
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Інструменти автоматизації змінюються щороку: нова версія Playwright — нові можливості, старі статті на
+Medium — вже неправда. Жоден курс не встигне за цим. Встигає той, хто вміє **сам** знайти відповідь в
+офіційній документації за п'ять хвилин.
+
+На співбесіді на «я не знаю» добрий інтерв'юер часто питає: «А як би ви це з'ясували?». Відповідь
+«відкрию документацію, ось де саме» — це вже півзаліку.
+
+## Концепція
+
+### Чотири види документації
+
+Хороша документація ділиться на чотири частини (модель [Diátaxis](https://diataxis.fr/)), і кожна —
+для своєї задачі:
+
+| Вид | Коли читати | Приклад |
+|---|---|---|
+| **Tutorial** (навчальний посібник) | Ти новачок у темі | Playwright → *Getting started* |
+| **How-to guide** (інструкція) | Знаєш, ЩО хочеш зробити | Playwright → *Authentication* |
+| **Reference** (довідник) | Потрібна точна деталь: параметр, опція, тип | Playwright → *API → Locator* |
+| **Explanation** (пояснення) | Хочеш зрозуміти, ЧОМУ так | Playwright → *Auto-waiting* |
+
+Типова помилка — шукати пояснення в довіднику або точний параметр у туторіалі.
+
+### Читай повідомлення про помилку
+
+Половину відповідей ти вже маєш — у тексті помилки. Читай його **повністю** і **знизу вгору до свого
+коду**:
+
+```
+TypeError: Cannot read properties of undefined (reading 'price')
+    at getTotal (src/cart.js:12:21)        ← тут упало: файл, рядок, колонка
+    at Object.<anonymous> (tests/cart.test.js:8:16)   ← звідки викликали
+    at node:internal/...                   ← нутрощі Node.js, зазвичай пропускаємо
+```
+
+1. **Тип помилки** (`TypeError`) — що за клас проблеми.
+2. **Повідомлення** — що саме: у когось `undefined`, а від нього просять `.price`.
+3. **Stack trace** — ланцюжок викликів. Шукай **перший рядок зі свого коду** — там і починай.
+
+Тести додають ще одну цінну частину — **Expected / Received**:
+
+```
+Expected: 3
+Received: "3"
+```
+
+Тут видно навіть різницю типів (лапки!) — привіт уроку про типи.
+
+### Стратегія пошуку
+
+1. **Прочитай помилку.** Повністю. Двічі.
+2. **Офіційна документація** інструмента — пошук на сайті (часто `Ctrl+K` або `/`).
+3. **Пошук у вебі з точним текстом помилки** в лапках, без твоїх імен файлів і змінних:
+   `"Cannot read properties of undefined" playwright` — і додай версію, якщо важливо.
+4. **GitHub Issues** інструмента — якщо схоже на баг самого інструмента.
+   Шукай і серед **закритих** issues.
+5. **Stack Overflow** — дивись дату відповіді і версію, до якої вона стосується.
+6. **Спитай людину / AI-ментора** — з тим, що вже спробував (див. нижче).
+
+<Aside type="tip" title="Перевіряй версію">
+Відповідь 2021 року про Playwright 1.12 може бути хибною для 1.65. У документації часто є перемикач
+версій, у `package.json` — твоя версія (`npx playwright --version`).
+</Aside>
+
+### Надійні джерела
+
+| Тема | Джерело |
+|---|---|
+| JavaScript | [MDN](https://developer.mozilla.org/), [javascript.info](https://uk.javascript.info/) (українською) |
+| TypeScript | [typescriptlang.org/docs](https://www.typescriptlang.org/docs/) |
+| Playwright | [playwright.dev/docs](https://playwright.dev/docs/intro) |
+| Node.js | [nodejs.org/api](https://nodejs.org/api/) |
+| npm | [docs.npmjs.com](https://docs.npmjs.com/) |
+| Git | [git-scm.com/docs](https://git-scm.com/docs), [Pro Git](https://git-scm.com/book/uk/v2) |
+| HTTP | [MDN: HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP) |
+
+W3Schools і випадкові блоги — для першого знайомства інколи ок, але **перевіряй** у першоджерелі.
+
+### Як питати, щоб тобі допомогли
+
+Добре питання (колезі, у чаті, AI) містить:
+
+1. Що робиш і що **очікуєш**.
+2. Що **відбувається насправді** — повний текст помилки, не скриншот.
+3. **Мінімальний код**, що відтворює проблему.
+4. Що **вже спробував** і чому не допомогло.
+5. Версії (Node.js, інструмента, ОС), якщо можуть бути важливі.
+
+Часто, поки ти так формулюєш питання, відповідь знаходиться сама (метод «гумової качечки»).
+
+### AI-асистент: ментор, а не автопілот
+
+AI (Claude, ChatGPT, Copilot) чудово пояснює помилки і незнайомий код. Але:
+
+- він **впевнено вигадує** неіснуючі опції й методи — перевіряй у документації;
+- готове рішення без розуміння = навичка не з'явилась, а на співбесіді AI не буде;
+- у цьому курсі Claude Code налаштований як ментор: веде підказками, а не дає відповідь одразу.
+
+## Типові помилки
+
+1. **Читати лише перший рядок помилки** — а відповідь у stack trace чи в Expected/Received.
+2. **Шукати з власними іменами** (`myCartHelper is undefined`) — інтернет про твої змінні не знає.
+3. **Копіювати перше рішення зі Stack Overflow** без перевірки версії й розуміння.
+4. **Скриншот помилки замість тексту** — його не можна знайти пошуком і скопіювати.
+5. **Довіряти AI без перевірки** — особливо щодо назв опцій, прапорців і методів API.
+6. **Годинами сидіти мовчки.** Правило 20 хвилин зі сторінки
+   [Як тут навчатися](/start-here/how-to-learn/): шукай сам, потім питай.
+
+## Документація
+
+1. [Diátaxis](https://diataxis.fr/) — коротко про чотири види документації.
+2. [MDN: What went wrong? Troubleshooting JavaScript](https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting/What_went_wrong)
+3. [javascript.info: Налагодження в браузері](https://uk.javascript.info/debugging-chrome)
+4. [Stack Overflow: How do I ask a good question?](https://stackoverflow.com/help/how-to-ask)
+
+## Практика
+
+Ката: `exercises/00-environment/06-reading-docs` — квест «знайди в документації». Сім коротких питань
+про npm, HTTP, Playwright, масиви, Git і Node.js; біля кожного вказано, у якому джерелі шукати.
+
+1. Відкрий `exercises/00-environment/06-reading-docs/exercise.js` і впиши відповіді.
+2. Запусти перевірку:
+
+   ```sh
+   npm run check -- exercises/00-environment/06-reading-docs
+   ```
+
+Тести знають лише хеш правильної відповіді, тож підглянути не вийде — тільки знайти.
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+## Самоперевірка
+
+<details>
+<summary>Ти шукаєш точну назву опції конфігурації Playwright. Який вид документації відкриєш?</summary>
+
+Reference (довідник) — розділ API / Test configuration. Туторіал тут лише втратить твій час.
+</details>
+
+<details>
+<summary>Як читати stack trace?</summary>
+
+Тип і повідомлення помилки, потім ланцюжок викликів: шукаєш перший рядок зі свого коду (файл:рядок) —
+там і починаєш розслідування. Рядки з `node_modules` чи `node:internal` зазвичай пропускаєш.
+</details>
+
+<details>
+<summary>Що має бути в доброму питанні про помилку?</summary>
+
+Очікування, фактичний результат з повним текстом помилки, мінімальний код, що вже спробував, версії.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Як ви шукаєте рішення, коли зіткнулися з незнайомою помилкою?
+- Як ви читаєте stack trace?
+- Як ви дізнаєтеся про нові можливості інструментів, якими користуєтесь?
+- Як ви використовуєте AI-асистентів у роботі? Які ризики бачите?
+</TabItem>
+<TabItem label="English">
+- How do you approach an unfamiliar error you have never seen before?
+- How do you read a stack trace?
+- How do you keep up with new features of the tools you use?
+- How do you use AI assistants in your work? What risks do you see?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="00-environment" lesson="06-reading-docs" />

@@ -1,0 +1,205 @@
+---
+title: "GitHub: репозиторій, fork, pull request"
+description: Віддалені репозиторії, clone, push і pull, автентифікація, fork і upstream, pull request і рев'ю.
+sidebar:
+  order: 5
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Git живе на твоєму комп'ютері. **GitHub** (як і GitLab, Bitbucket) — сервер, де живе спільна копія
+репозиторію і де відбувається командна робота:
+
+- ти відкриваєш **pull request** з новими тестами, і колеги роблять рев'ю;
+- ти рев'юїш PR розробника і перевіряєш, чи є тести на нову фічу;
+- на кожен PR автоматично запускаються автотести (GitHub Actions — модуль 11), і ти розбираєшся,
+  чому вони червоні;
+- твій публічний репозиторій з фреймворком — **портфоліо**, яке роботодавець відкриє до співбесіди.
+
+## Концепція
+
+### Локальний і віддалений репозиторій
+
+**Remote** — віддалена копія репозиторію. Зазвичай вона одна й називається `origin`.
+
+```sh
+git clone https://github.com/user/repo.git   # скопіювати репозиторій собі (origin налаштується сам)
+git remote -v                                # куди дивляться remotes
+git push -u origin feature/cart-tests        # відправити гілку вперше (-u запам'ятовує зв'язок)
+git push                                     # далі — просто push
+git fetch                                    # лише завантажити нові коміти з сервера, нічого не змінюючи
+git pull                                     # fetch + злити нові коміти з поточною гілкою
+```
+
+Правило: **починай роботу з `git pull`**, щоб не працювати на застарілому коді.
+
+### Автентифікація
+
+GitHub не приймає пароль акаунта для `git push`. Варіанти:
+
+- **HTTPS + Git Credential Manager** — встановлюється з Git for Windows; на macOS — разом з Git
+  через Homebrew або Xcode tools. Перший `push` відкриє вхід у браузері.
+- **SSH-ключ** — один раз згенерувати ключ, додати публічну частину в GitHub → Settings → SSH keys.
+- **[GitHub CLI](https://cli.github.com/)** (`gh auth login`) — заодно дає команди для PR з термінала.
+
+<Aside type="caution" title="Робочий і особистий акаунти">
+Якщо на комп'ютері вже є робочий GitHub-акаунт, Git може підставити його для особистого репозиторію —
+і ти отримаєш `403 Permission denied`. Перевір, яким акаунтом виконується вхід, і налаштуй облікові
+дані окремо для цього репозиторію, а не глобально.
+</Aside>
+
+### Fork і upstream
+
+**Fork** — твоя власна копія чужого репозиторію на GitHub. У нього ти можеш пушити, а в оригінал — ні.
+Так влаштований open source: зміни пропонують з fork через pull request.
+
+Для курсу fork — найкращий спосіб працювати: твої рішення кат зберігаються на GitHub, а оновлення курсу
+ти підтягуєш з оригіналу, який прийнято називати **upstream**:
+
+```sh
+git remote add upstream https://github.com/DanielKuka/qa-academy.git
+git pull upstream main          # забрати нові уроки й вправи курсу
+```
+
+### Pull request
+
+**Pull request** (PR; у GitLab — merge request) — запит «злий мою гілку в `main`». У PR:
+
+- видно diff — що саме змінено;
+- колеги залишають коментарі до рядків і **схвалюють** (approve) або просять зміни;
+- запускаються автоматичні перевірки (CI);
+- після схвалення гілку **зливають** (merge), і її можна видалити.
+
+Хороший PR: невеликий, з назвою за тими ж правилами, що й коміт, і з описом **що** і **навіщо**
+(і як перевірити).
+
+### Цикл роботи в команді
+
+```sh
+git switch main && git pull                 # 1. свіжий main
+git switch -c test/checkout-guest           # 2. своя гілка
+# ... пишеш тести, git add, git commit ...  # 3. невеликі коміти
+git push -u origin test/checkout-guest      # 4. гілку — на GitHub
+# 5. відкриваєш PR на GitHub, проходиш рев'ю, мерджиш
+```
+
+### Issues і README
+
+- **Issues** — задачі й баг-репорти в репозиторії. Посилайся на них у PR: `Closes #12`.
+- **README.md** — перше, що бачить відвідувач репозиторію. Для портфоліо він вирішальний: що це за
+  проєкт, як запустити тести, що демонструє.
+
+## Типові помилки
+
+1. **Push у чужий `main` / прямо в `main`.** У командах `main` зазвичай захищений — працюй через гілки
+   й PR.
+2. **Забув `git pull`.** Конфлікти й «чому в мене немає нового тесту колеги».
+3. **Величезний PR на 40 файлів.** Його не прорев'юють якісно. Краще кілька маленьких.
+4. **PR без опису.** Рев'юер мусить гадати, що й навіщо змінено.
+5. **Fork оновлюється сам?** Ні. Без `git pull upstream main` твій fork застаріває.
+6. **Токен або пароль у коді, щоб push працював.** Ніколи. Тільки Credential Manager, SSH чи `gh`.
+
+## Документація
+
+1. [GitHub Docs: About Git](https://docs.github.com/en/get-started/using-git/about-git) і
+   [Hello World](https://docs.github.com/en/get-started/start-your-journey/hello-world) — перший репозиторій і PR.
+2. [GitHub Docs: Fork a repository](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo)
+   і [Syncing a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/syncing-a-fork).
+3. [GitHub Docs: About pull requests](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests).
+4. [Pro Git, розділ 2.5 «Віддалені сховища»](https://git-scm.com/book/uk/v2) — українською.
+
+## Практика
+
+Автоматичної кати тут немає — практика відбувається на GitHub. Після неї ти працюватимеш у курсі
+так, як працюють у команді.
+
+<Steps>
+
+1. Зареєструйся на [github.com](https://github.com/) (або увійди) і налаштуй автентифікацію
+   одним зі способів вище.
+
+2. Зроби **fork** репозиторію курсу: кнопка **Fork** на сторінці
+   [DanielKuka/qa-academy](https://github.com/DanielKuka/qa-academy).
+
+3. Склонуй **свій** fork і додай оригінал як `upstream`:
+
+   ```sh
+   git clone https://github.com/<твій-логін>/qa-academy.git
+   cd qa-academy
+   git remote add upstream https://github.com/DanielKuka/qa-academy.git
+   git remote -v
+   npm install
+   ```
+
+   Якщо раніше ти клонував оригінал — розв'язані ката перенеси в нову копію або просто почни заново.
+
+4. Створи гілку `solutions/module-00`, закоміть свої рішення кат 01 і 04 (кожну — окремим комітом
+   з нормальним повідомленням) і запуш гілку у свій fork.
+
+5. Відкрий **pull request у своєму fork**: base — `main` твого fork, compare — `solutions/module-00`.
+   Напиши опис: що розв'язано, як перевірити (`npm run check -- ...`).
+
+6. Переглянь diff у PR, залиш собі хоча б один коментар до рядка, потім злий PR.
+
+7. Локально: `git switch main`, `git pull` — зміни з PR тепер у твоєму `main`.
+   І `git pull upstream main` — так ти забиратимеш нові уроки курсу.
+
+</Steps>
+
+<Aside type="caution">
+У кроці 5 перевір, що PR відкривається у **твій** fork, а не в оригінальний репозиторій курсу:
+GitHub за замовчуванням пропонує upstream.
+</Aside>
+
+## Самоперевірка
+
+<details>
+<summary>Чим Git відрізняється від GitHub?</summary>
+
+Git — система контролю версій, працює локально. GitHub — сервіс, який зберігає віддалені репозиторії і
+додає командну роботу: PR, рев'ю, issues, CI.
+</details>
+
+<details>
+<summary>Чим fork відрізняється від clone?</summary>
+
+Fork — копія репозиторію **на GitHub** під твоїм акаунтом. Clone — копія **на твоєму комп'ютері**.
+Зазвичай роблять fork, а потім clone свого fork.
+</details>
+
+<details>
+<summary>Що таке `origin` і `upstream`?</summary>
+
+Імена remotes. `origin` — звідки ти клонував (твій fork), `upstream` — оригінальний репозиторій, з якого
+забирають оновлення.
+</details>
+
+<details>
+<summary>Що має бути в описі хорошого pull request?</summary>
+
+Що змінено, навіщо, як перевірити; посилання на задачу. І сам PR — невеликий і сфокусований.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Що таке pull request і як у вашій команді проходить рев'ю коду?
+- Чим `git pull` відрізняється від `git fetch`?
+- Що таке fork і навіщо він потрібен?
+- Що ви перевіряєте, коли робите рев'ю PR з автотестами?
+- Як ви тримаєте свою гілку актуальною відносно `main`?
+</TabItem>
+<TabItem label="English">
+- What is a pull request, and how does code review work in your team?
+- What is the difference between `git pull` and `git fetch`?
+- What is a fork, and why would you use one?
+- What do you look for when reviewing a pull request with automated tests?
+- How do you keep your branch up to date with `main`?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="00-environment" lesson="05-github" />

@@ -90,13 +90,13 @@ test.describe('Сторінка прогресу', () => {
 	test('підказує наступний урок і рахує загальний прогрес', async ({ page }) => {
 		await page.goto('progress/');
 		const next = page.getByText('Продовжити з:');
-		await expect(next.getByRole('link')).toHaveText(`JavaScript: основи → ${LESSON_TITLE}`);
+		await expect(next.getByRole('link')).toHaveText('Середовище розробника → Термінал: базові команди');
 
 		await next.getByRole('link').click();
 		await lessonPanel(page).getByRole('button', { name: 'Пройдено ✓' }).click();
 
 		await page.goto('progress/');
-		await expect(page.getByText('Усі доступні уроки пройдено. Чекай на нові!')).toBeVisible();
+		await expect(next.getByRole('link')).toHaveText('Середовище розробника → Node.js і npm');
 		await expect(page.getByText('1%', { exact: true })).toBeVisible();
 	});
 

@@ -1,6 +1,6 @@
 // Еталонні відповіді кати 00-06.
 export const answers = {
-	npmInstallFromLockfile: 'npm ci', // https://docs.npmjs.com/cli/commands/npm-ci
+	npmOutdatedCommand: 'npm outdated', // https://docs.npmjs.com/cli/commands/npm-outdated
 	tooManyRequestsStatus: 429, // https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429
 	playwrightUiFlag: '--ui', // https://playwright.dev/docs/test-cli
 	playwrightRetriesOption: 'retries', // https://playwright.dev/docs/test-retries

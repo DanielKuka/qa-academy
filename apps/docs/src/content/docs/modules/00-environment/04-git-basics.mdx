@@ -1,0 +1,212 @@
+---
+title: "Git: перші кроки"
+description: Робоча тека, індекс і коміти; status, add, commit, log, diff; гілки; .gitignore і чому секрети не комітять.
+sidebar:
+  order: 4
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import LessonProgress from '~/components/LessonProgress.astro';
+
+## Навіщо це QA
+
+Тести — це код, і живе він у Git, як і код застосунку. Щодня автоматизатор:
+
+- створює гілку під нові тести, комітить, відкриває pull request на рев'ю;
+- дивиться `git log`, щоб зрозуміти, **який коміт** зламав тест (а значить — кого питати);
+- перемикається на гілку розробника, щоб перевірити фічу до злиття.
+
+І одна з найдорожчих помилок джуна — закомітити `.env` з паролями до стенда в публічний репозиторій.
+Цей урок — про те, як працювати з Git упевнено і безпечно.
+
+## Концепція
+
+### Три місця, де живуть зміни
+
+```
+робоча тека  ──git add──▶  індекс (staging)  ──git commit──▶  історія (коміти)
+ (working tree)               «що піде в коміт»                 (repository)
+```
+
+- **Робоча тека** — файли, які ти бачиш і редагуєш.
+- **Індекс** (staging area) — «кошик» змін, які ти **вирішив** закомітити.
+- **Коміт** — знімок проєкту з повідомленням, автором і датою. Коміти утворюють історію.
+
+Індекс існує для того, щоб ти сам обирав, що входить у коміт: зміни в тесті логіну — так, випадковий
+`console.log` в іншому файлі — ні.
+
+### Перше налаштування (один раз на комп'ютері)
+
+```sh
+git config --global user.name "Ім'я Прізвище"
+git config --global user.email "you@example.com"
+git config --global init.defaultBranch main
+```
+
+### Базовий цикл
+
+```sh
+git init                        # перетворити теку на репозиторій (один раз)
+git status                      # ЩО змінилося — запускай постійно
+git diff                        # ЯК змінилося (ще не в індексі)
+git add tests/login.spec.ts     # додати файл в індекс
+git diff --staged               # що саме піде в коміт
+git commit -m "test: add login test"
+git log --oneline               # історія комітів коротко
+```
+
+`git status` — твій найкращий друг. Він завжди підказує наступну команду.
+
+### Скасування
+
+```sh
+git restore tests/login.spec.ts          # відкотити зміни у файлі до останнього коміту (НЕЗВОРОТНО)
+git restore --staged tests/login.spec.ts # прибрати з індексу, зміни лишаються у файлі
+```
+
+### Гілки
+
+Гілка (branch) — окрема лінія розвитку. `main` — стабільна версія; нову роботу роблять у своїй гілці
+й потім зливають через pull request (урок 05).
+
+```sh
+git branch                      # список гілок, * — поточна
+git switch -c feature/cart-tests  # створити гілку і перейти на неї
+git switch main                 # перейти на існуючу
+git branch -d feature/cart-tests  # видалити (злиту) гілку
+```
+
+Коміт потрапляє в ту гілку, на якій ти зараз. Перемикаючись, Git змінює файли в робочій теці під
+стан тієї гілки.
+
+<Aside type="note" title="checkout чи switch?">
+У старих статтях — `git checkout -b гілка` і `git checkout файл`. Це та сама команда, що робила
+забагато різного. Сучасна заміна — `git switch` (гілки) і `git restore` (файли).
+</Aside>
+
+### `.gitignore`
+
+Файл `.gitignore` у корені репозиторію перелічує, що Git має **ігнорувати**:
+
+```
+node_modules/
+test-results/
+playwright-report/
+.env
+```
+
+Ігнорувати треба те, що генерується (залежності, звіти) або є секретом (`.env`, ключі).
+
+<Aside type="danger" title="Порядок має значення">
+`.gitignore` діє лише на файли, які Git ще **не відстежує**. Якщо `.env` уже потрапив в індекс чи коміт,
+додавання в `.gitignore` не допоможе. Тому спершу `.gitignore` — потім `git add`. А якщо секрет таки
+потрапив у коміт, вважай його скомпрометованим: видалення файлу не прибирає його з історії, пароль
+треба змінити.
+</Aside>
+
+### Повідомлення комітів
+
+Добре повідомлення каже, **що** і **навіщо**, у наказовому способі. Поширений стандарт —
+[Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+test: add checkout tests for guest user
+fix: wait for cart badge before asserting count
+chore: update playwright to 1.65
+```
+
+Погано: `fix`, `changes`, `asdf`, `WIP 2`.
+
+## Типові помилки
+
+1. **`git add .` наосліп.** У коміт летять `.env`, логи, скриншоти. Спершу `git status`, потім додавай
+   осмислено.
+2. **Коміт прямо в `main`.** Забув створити гілку — і зміни пішли повз рев'ю. Перед роботою:
+   `git switch -c ...`.
+3. **`.gitignore` після `git add`.** Файл уже відстежується, ігнор не діє.
+4. **Один гігантський коміт** «усе за тиждень». Неможливо переглянути й неможливо частково відкотити.
+   Коміть невеликими логічними кроками.
+5. **`git restore` без розуміння.** Він безповоротно стирає незакомічені зміни у файлі.
+6. **Секрет у коміті «я потім видалю».** Історія пам'ятає все. Пароль — змінювати.
+
+## Документація
+
+1. [Pro Git, розділ 1–3](https://git-scm.com/book/uk/v2) — офіційна книга, **є українською**: основи,
+   гілки.
+2. [Git: git status](https://git-scm.com/docs/git-status), [git add](https://git-scm.com/docs/git-add),
+   [git commit](https://git-scm.com/docs/git-commit), [git switch](https://git-scm.com/docs/git-switch) —
+   довідник команд.
+3. [gitignore documentation](https://git-scm.com/docs/gitignore) — синтаксис шаблонів.
+4. [Learn Git Branching](https://learngitbranching.js.org/?locale=uk) — інтерактивний тренажер гілок
+   українською.
+
+## Практика
+
+Ката: `exercises/00-environment/04-git-basics`. У репозиторії є новий тест, файл `.env` з паролем і
+`node_modules/`. Потрібно закомітити тест у feature-гілку так, щоб жоден секрет не потрапив в історію.
+
+1. Створи тимчасову теку, зроби в ній `git init`, відтвори ситуацію (кілька файлів, `.env`) і пройди
+   сценарій руками, запускаючи `git status` після кожного кроку.
+2. Запиши команди у `exercises/00-environment/04-git-basics/git-steps.sh`.
+3. Запусти перевірку з кореня репозиторію:
+
+   ```sh
+   npm run check -- exercises/00-environment/04-git-basics
+   ```
+
+Тест створює окремий тимчасовий репозиторій, тож репозиторій курсу він не зачепить.
+
+<Aside type="note" title="Де ця вправа?">
+Вправи лежать у репозиторії курсу на твоєму комп'ютері, а не на сайті.
+Ще не налаштував — див. [Де лежать вправи і як їх запустити](/start-here/how-to-learn/#де-лежать-вправи-і-як-їх-запустити).
+</Aside>
+
+## Самоперевірка
+
+<details>
+<summary>Що таке індекс (staging area) і навіщо він?</summary>
+
+Проміжна зона між робочою текою і комітом. Дозволяє обрати, які саме зміни увійдуть у коміт.
+</details>
+
+<details>
+<summary>Ти додав `.env` у `.gitignore`, а `git status` все одно показує його змінним. Чому?</summary>
+
+Файл уже відстежується (його раніше закомітили або додали в індекс). Треба прибрати його з відстеження
+(`git rm --cached .env`), закомітити, а пароль — змінити, бо він лишився в історії.
+</details>
+
+<details>
+<summary>Як подивитися, що саме піде в наступний коміт?</summary>
+
+`git status` — які файли, `git diff --staged` — які саме рядки.
+</details>
+
+<details>
+<summary>Навіщо працювати в окремій гілці, а не в `main`?</summary>
+
+Зміни ізольовані, їх можна переглянути в pull request до злиття, а `main` лишається стабільним.
+</details>
+
+## Співбесіда
+
+<Tabs>
+<TabItem label="Українською">
+- Що таке Git і чим він відрізняється від GitHub?
+- Яка різниця між робочою текою, індексом і репозиторієм?
+- Які Git-команди ви використовуєте щодня?
+- Що таке гілка? Як ви працюєте з гілками в команді?
+- Що таке `.gitignore`? Що в нього має потрапляти в проєкті з автотестами?
+- Що робити, якщо в репозиторій закомітили пароль?
+</TabItem>
+<TabItem label="English">
+- What is Git, and how is it different from GitHub?
+- What is the difference between the working tree, the staging area and the repository?
+- Which Git commands do you use every day?
+- What is a branch? How does your team work with branches?
+- What is `.gitignore`? What should go into it in a test automation project?
+- What do you do if someone committed a password to the repository?
+</TabItem>
+</Tabs>
+
+<LessonProgress module="00-environment" lesson="04-git-basics" />
