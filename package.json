@@ -15,9 +15,9 @@
     "build": "npm run build -w @qa-academy/docs",
     "preview": "npm run preview -w @qa-academy/docs",
     "sync:modules": "npm run sync:modules -w @qa-academy/docs",
-    "check": "vitest run",
-    "check:watch": "vitest",
-    "verify:solutions": "vitest run --mode solutions",
+    "check": "node scripts/vitest.mjs run",
+    "check:watch": "node scripts/vitest.mjs",
+    "verify:solutions": "node scripts/vitest.mjs run --mode solutions",
     "test:site": "npm run build && playwright test"
   },
   "devDependencies": {
